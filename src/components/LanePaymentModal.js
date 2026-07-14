@@ -4,7 +4,9 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
+  increment,
   query,
   serverTimestamp,
   updateDoc,
@@ -39,14 +41,102 @@ function isBallService(serviceName = '') {
   return serviceName.includes('ลูกกอล์ฟ') || serviceName.includes('ถาด') || serviceName.includes('Ball');
 }
 
-function LanePaymentModal({ booking, onClose, setAlert }) {
+function getServiceUnit(service = {}) {
+  return service.Service_Unit || service.Unit || service.unit || 'หน่วย';
+}
+
+const TIME_SLOTS_ORDER = [
+  '08:00-09:00', '09:00-10:00', '10:00-11:00', '11:00-12:00',
+  '12:00-13:00', '13:00-14:00', '14:00-15:00', '15:00-16:00',
+  '16:00-17:00', '17:00-18:00', '18:00-19:00'
+];
+
+function getUnionSlotsFromDetailedSlots(detailedSlots = {}) {
+  return Array.from(new Set(Object.values(detailedSlots).flat())).sort();
+}
+
+function getBookingDetailedSlots(booking = {}) {
+  const existingDetailedSlots = booking.detailedSlots || booking.Detailed_Slots || {};
+  if (existingDetailedSlots && Object.keys(existingDetailedSlots).length > 0) {
+    return existingDetailedSlots;
+  }
+
+  const lanes = Array.isArray(booking.selectedLanes) && booking.selectedLanes.length > 0
+    ? booking.selectedLanes
+    : booking.laneNum || booking.laneNumber
+      ? [booking.laneNum || booking.laneNumber]
+      : [];
+  const slots = Array.isArray(booking.timeSlots) ? booking.timeSlots : [];
+
+  return lanes.reduce((acc, lane) => {
+    acc[`lane_${lane}`] = slots;
+    return acc;
+  }, {});
+}
+
+function removeSlotsFromDetailedSlots(detailedSlots = {}, laneKey, slotsToRemove = []) {
+  const removeSet = new Set(slotsToRemove);
+  const nextDetailedSlots = { ...detailedSlots };
+
+  if (!laneKey || !Array.isArray(nextDetailedSlots[laneKey])) {
+    return nextDetailedSlots;
+  }
+
+  const remainingLaneSlots = nextDetailedSlots[laneKey].filter((slot) => !removeSet.has(slot));
+  if (remainingLaneSlots.length > 0) {
+    nextDetailedSlots[laneKey] = remainingLaneSlots;
+  } else {
+    delete nextDetailedSlots[laneKey];
+  }
+
+  return nextDetailedSlots;
+}
+
+function getContiguousSlots(booking, laneKey, focusedSlot) {
+  if (!focusedSlot) return [];
+
+  const detailedSlots = getBookingDetailedSlots(booking);
+  const laneSlots = Array.isArray(detailedSlots?.[laneKey])
+    ? detailedSlots[laneKey]
+    : Array.isArray(booking?.timeSlots)
+      ? booking.timeSlots
+      : [];
+  const slotSet = new Set(laneSlots);
+  const focusedIndex = TIME_SLOTS_ORDER.indexOf(focusedSlot);
+
+  if (focusedIndex === -1 || !slotSet.has(focusedSlot)) {
+    return [focusedSlot];
+  }
+
+  let startIndex = focusedIndex;
+  let endIndex = focusedIndex;
+
+  while (startIndex > 0 && slotSet.has(TIME_SLOTS_ORDER[startIndex - 1])) {
+    startIndex -= 1;
+  }
+
+  while (endIndex < TIME_SLOTS_ORDER.length - 1 && slotSet.has(TIME_SLOTS_ORDER[endIndex + 1])) {
+    endIndex += 1;
+  }
+
+  return TIME_SLOTS_ORDER.slice(startIndex, endIndex + 1);
+}
+
+const formatPoints = (value) => Number(value || 0).toLocaleString(undefined, {
+  maximumFractionDigits: 2
+});
+
+function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
   const [services, setServices] = useState([]);
   const [quantities, setQuantities] = useState({});
   const [usedPoints, setUsedPoints] = useState(0);
+  const [memberPoints, setMemberPoints] = useState(0);
+  const [pointSettings, setPointSettings] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('เงินสด');
   const [cashAmount, setCashAmount] = useState(0);
   const [transferAmount, setTransferAmount] = useState(0);
   const [loadingServices, setLoadingServices] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [isClubDetailOpen, setIsClubDetailOpen] = useState(false);
 
   const rentedClubs = useMemo(
@@ -57,13 +147,29 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
     () => rentedClubs.reduce((sum, club) => sum + Number(club.qty || 0), 0),
     [rentedClubs]
   );
+  const checkoutLaneNumber = booking?.checkoutLaneNumber || null;
+  const checkoutLaneKey = checkoutLaneNumber ? `lane_${checkoutLaneNumber}` : null;
+  const checkoutSlots = useMemo(() => (
+    booking?.checkoutSlot && checkoutLaneKey
+      ? getContiguousSlots(booking, checkoutLaneKey, booking.checkoutSlot)
+      : Array.isArray(booking?.activeTimeSlots) && booking.activeTimeSlots.length > 0
+        ? booking.activeTimeSlots
+        : Array.isArray(booking?.timeSlots)
+          ? booking.timeSlots
+          : []
+  ), [booking, checkoutLaneKey]);
+  const checkoutLaneLabel = checkoutLaneNumber
+    ? `เลน ${checkoutLaneNumber}`
+    : Array.isArray(booking?.selectedLanes) && booking.selectedLanes.length > 0
+      ? `เลน ${booking.selectedLanes.join(', ')}`
+      : 'ไม่ระบุเลน';
   const bookingTimeLabel = useMemo(() => {
-    if (!Array.isArray(booking?.timeSlots) || booking.timeSlots.length === 0) {
+    if (!Array.isArray(checkoutSlots) || checkoutSlots.length === 0) {
       return '-';
     }
 
-    return booking.timeSlots.join(', ');
-  }, [booking?.timeSlots]);
+    return checkoutSlots.join(', ');
+  }, [checkoutSlots]);
 
   useEffect(() => {
     const fetchActiveServices = async () => {
@@ -120,9 +226,42 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
     }
   }, [paymentMethod]);
 
+  useEffect(() => {
+    const fetchPointContext = async () => {
+      const bookingUserId =
+        booking?.User_ID && booking.User_ID !== 'walk-in' ? booking.User_ID : '';
+
+      setUsedPoints(0);
+      setMemberPoints(Number(booking?.Points_Balance || 0));
+
+      try {
+        const pointSnap = await getDoc(doc(db, 'Point_Settings', 'config_01'));
+        setPointSettings(pointSnap.exists() ? pointSnap.data() : null);
+
+        if (bookingUserId) {
+          const userSnap = await getDoc(doc(db, 'users', bookingUserId));
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            setMemberPoints(Number(userData.Points_Balance ?? userData.points_balance ?? 0));
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching payment point context:', error);
+      }
+    };
+
+    if (booking) {
+      fetchPointContext();
+    }
+  }, [booking]);
+
+  const memberUserId =
+    booking?.User_ID && booking.User_ID !== 'walk-in' ? booking.User_ID : '';
+  const availableMemberPoints = memberUserId ? Number(memberPoints || 0) : 0;
+
   const safeUsedPoints = Math.min(
-    Math.max(0, Number(usedPoints) || 0),
-    Number(booking?.Points_Balance || 0)
+    Math.floor(Math.max(0, Number(usedPoints) || 0)),
+    Math.floor(availableMemberPoints)
   );
 
   const totalAmount = services.reduce((sum, service) => {
@@ -131,7 +270,32 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
     return sum + qty * rate;
   }, 0);
 
-  const netAmount = Math.max(0, totalAmount - safeUsedPoints);
+  const redemptionRatePoints = Number(pointSettings?.RDT_Rate_Points || 0);
+  const redemptionRateDiscount = Number(pointSettings?.RDT_Rate_Discount || 0);
+  const pointDiscount =
+    pointSettings?.Redemption_Is_Active &&
+    redemptionRatePoints > 0 &&
+    redemptionRateDiscount > 0
+      ? Math.floor(safeUsedPoints / redemptionRatePoints) * redemptionRateDiscount
+      : safeUsedPoints;
+  const redeemedPoints =
+    pointSettings?.Redemption_Is_Active &&
+    redemptionRatePoints > 0 &&
+    redemptionRateDiscount > 0
+      ? Math.floor(safeUsedPoints / redemptionRatePoints) * redemptionRatePoints
+      : safeUsedPoints;
+  const safePointDiscount = Math.min(totalAmount, Math.floor(Math.max(0, pointDiscount)));
+  const netAmount = Math.max(0, totalAmount - safePointDiscount);
+  const earningRateAmount = Number(pointSettings?.Earning_Rate_Amount || 0);
+  const earningRatePoints = Number(pointSettings?.Earning_Rate_Points || 0);
+  const earnedPoints =
+    memberUserId &&
+    pointSettings?.Earning_Is_Active &&
+    earningRateAmount > 0 &&
+    earningRatePoints > 0
+      ? Math.floor(Math.floor(netAmount / earningRateAmount) * earningRatePoints)
+      : 0;
+  const pointBalanceChange = earnedPoints - redeemedPoints;
   const safeCashAmount = Math.max(0, Number(cashAmount) || 0);
   const safeTransferAmount = Math.max(0, Number(transferAmount) || 0);
   const mixedPaymentTotal = safeCashAmount + safeTransferAmount;
@@ -157,7 +321,11 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
   };
 
   const handleConfirmPayment = async () => {
+    if (isProcessing) return;
+
     try {
+      setIsProcessing(true);
+
       const itemsList = services
         .map((service) => {
           const qty = quantities[service.id] || 0;
@@ -167,7 +335,7 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
             item_name: service.Service_Name,
             qty,
             price: qty * Number(service.Price_Rate || 0),
-            unit: service.Unit || 'หน่วย'
+            unit: getServiceUnit(service)
           };
         })
         .filter(Boolean);
@@ -181,8 +349,12 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
         isClubRentalService(item.item_name || '')
       );
 
-      if (selectedClubRentalItem && selectedClubRentalItem.qty > totalRentedClubQty) {
-        alert('จำนวนค่าเช่าไม้กอล์ฟต้องไม่เกินจำนวนไม้ที่เลือกไว้');
+      if (
+        selectedClubRentalItem &&
+        booking.needsClubRent &&
+        selectedClubRentalItem.qty !== totalRentedClubQty
+      ) {
+        alert('จำนวนค่าเช่าไม้กอล์ฟต้องตรงกับจำนวนไม้กอล์ฟที่เลือกไว้ตอนจอง');
         return;
       }
 
@@ -198,9 +370,15 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
         Needs_Instructor: Boolean(booking.needsInstructor),
         Needs_Club_Rent: Boolean(booking.needsClubRent),
         Payment_Date: serverTimestamp(),
+        Cashier_ID: cashierInfo?.id || '',
+        Cashier_Name: cashierInfo?.name || 'ไม่ระบุชื่อผู้รับชำระ',
+        Cashier_Role: cashierInfo?.role || '',
+        Cashier_Email: cashierInfo?.email || '',
         Total_Amount: totalAmount,
-        Used_Points: safeUsedPoints,
-        Point_Discount: safeUsedPoints,
+        Used_Points: redeemedPoints,
+        Point_Discount: safePointDiscount,
+        Earned_Points: earnedPoints,
+        Point_Balance_Change: pointBalanceChange,
         Net_Amount: netAmount,
         Payment_Method: paymentMethod,
         Cash_Amount:
@@ -215,21 +393,57 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
             : paymentMethod === 'เงินโอน'
               ? netAmount
               : 0,
-        Lane_Code: booking.selectedLanes
-          ? `เลน ${booking.selectedLanes.join(', ')}`
-          : 'ไม่ระบุเลน',
-        Time_Slots: Array.isArray(booking.timeSlots) ? booking.timeSlots : [],
+        Lane_Code: checkoutLaneLabel,
+        Time_Slots: checkoutSlots,
         status: 'active',
         Items_List: itemsList,
         Rented_Clubs: rentedClubs
       });
 
-      await updateDoc(doc(db, 'bookings', booking.id), { status: 'completed' });
+      if (memberUserId && pointBalanceChange !== 0) {
+        await updateDoc(doc(db, 'users', memberUserId), {
+          Points_Balance: increment(pointBalanceChange)
+        });
+      }
 
-      if (Array.isArray(booking.selectedLanes)) {
-        for (const laneNum of booking.selectedLanes) {
-          await updateDoc(doc(db, 'lanes', `lane_${laneNum}`), { status: 'available' });
-        }
+      const baseDetailedSlots = getBookingDetailedSlots(booking);
+      const baseActiveDetailedSlots = booking.activeDetailedSlots || booking.Active_Detailed_Slots || {};
+      const nextDetailedSlots = checkoutLaneKey
+        ? removeSlotsFromDetailedSlots(baseDetailedSlots, checkoutLaneKey, checkoutSlots)
+        : {};
+      const nextActiveDetailedSlots = checkoutLaneKey
+        ? removeSlotsFromDetailedSlots(baseActiveDetailedSlots, checkoutLaneKey, checkoutSlots)
+        : {};
+      const remainingTimeSlots = getUnionSlotsFromDetailedSlots(nextDetailedSlots);
+      const remainingActiveTimeSlots = getUnionSlotsFromDetailedSlots(nextActiveDetailedSlots);
+
+      if (remainingTimeSlots.length === 0) {
+        await updateDoc(doc(db, 'bookings', booking.id), {
+          status: 'completed',
+          activeTimeSlots: [],
+          activeDetailedSlots: {},
+          completedAt: new Date().toISOString()
+        });
+      } else {
+        const remainingSelectedLanes = Object.keys(nextDetailedSlots)
+          .map((key) => Number(key.replace('lane_', '')))
+          .filter(Number.isFinite)
+          .sort((a, b) => a - b);
+
+        await updateDoc(doc(db, 'bookings', booking.id), {
+          selectedLanes: remainingSelectedLanes,
+          laneNumber: remainingSelectedLanes.join(', '),
+          timeSlots: remainingTimeSlots,
+          detailedSlots: nextDetailedSlots,
+          activeTimeSlots: remainingActiveTimeSlots,
+          activeDetailedSlots: nextActiveDetailedSlots,
+          status: remainingActiveTimeSlots.length > 0 ? 'occupied' : 'confirmed',
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      if (checkoutLaneNumber) {
+        await updateDoc(doc(db, 'lanes', `lane_${checkoutLaneNumber}`), { status: 'available' });
       }
 
       onClose();
@@ -243,12 +457,14 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
     } catch (error) {
       console.error('Error processing payment:', error);
       alert(`เกิดข้อผิดพลาดในการรับชำระเงิน: ${error.message}`);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 p-3 backdrop-blur-sm animate-fadeIn sm:items-center sm:p-4">
-      <div className="flex max-h-none w-full max-w-4xl flex-col overflow-visible rounded-3xl border border-slate-100 bg-white p-4 text-left shadow-2xl sm:max-h-[90vh] sm:overflow-hidden sm:rounded-[2rem] sm:p-8">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 p-3 backdrop-blur-sm animate-fadeIn sm:p-4">
+      <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-4xl flex-col overflow-y-auto rounded-3xl border border-slate-100 bg-white p-4 text-left shadow-2xl sm:max-h-[calc(100vh-2rem)] sm:rounded-[2rem] sm:p-8">
         <div className="mb-4 sm:mb-6">
           <h2 className="text-2xl font-extrabold tracking-tight text-slate-800">
             ใบสรุปรายการและคิดเงินรับชำระ
@@ -280,7 +496,7 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
               หมายเลขเลน
             </span>
             <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-extrabold text-emerald-600">
-              เลน {booking.selectedLanes?.join(', ') || booking.laneNumber}
+              {checkoutLaneLabel}
             </div>
           </div>
 
@@ -288,7 +504,7 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-400">
               เวลาใช้งาน
             </span>
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-800">
+            <div className="max-h-20 overflow-y-auto break-words rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold leading-relaxed text-slate-800">
               {bookingTimeLabel}
             </div>
           </div>
@@ -303,8 +519,8 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
           </div>
         </div>
 
-        <div className="grid flex-1 grid-cols-1 gap-4 overflow-visible sm:gap-6 sm:overflow-hidden lg:grid-cols-3">
-          <div className="flex flex-col justify-between overflow-visible rounded-2xl border border-slate-200 bg-white p-3 sm:overflow-y-auto sm:p-5 lg:col-span-2">
+        <div className="grid grid-cols-1 gap-4 overflow-visible sm:gap-6 lg:grid-cols-3">
+          <div className="flex flex-col justify-between overflow-visible rounded-2xl border border-slate-200 bg-white p-3 sm:p-5 lg:col-span-2">
             <div className="space-y-4">
               <span className="mb-2 block text-xs font-extrabold uppercase tracking-wider text-slate-400">
                 รายการบริการและสินค้า
@@ -320,9 +536,11 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
                   const priceRate = Number(service.Price_Rate || 0);
                   const serviceName = service.Service_Name || '';
                   const clubRental = isClubRentalService(serviceName);
+                  const isLockedClubRental = clubRental && booking.needsClubRent;
                   const maxQty = clubRental ? totalRentedClubQty : null;
                   const decreaseDisabled = currentQty <= 0;
                   const increaseDisabled = typeof maxQty === 'number' && currentQty >= maxQty;
+                  const serviceUnit = getServiceUnit(service);
 
                   return (
                     <div
@@ -335,42 +553,53 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
                             {service.Service_Name}
                           </span>
                           <span className="font-mono text-xs font-medium text-slate-400">
-                            เรต {priceRate} ฿ / {service.Unit || 'หน่วย'}
+                            เรต {priceRate} ฿ / {serviceUnit}
                           </span>
                         </div>
 
                         <div className="flex items-center justify-between gap-3 sm:justify-end sm:gap-6">
-                          <div className="flex items-center space-x-2 rounded-xl border bg-slate-50 p-1 shadow-sm">
-                            <button
-                              onClick={() =>
-                                handleQuantityChange(service.id, -1, { maxQty })
-                              }
-                              disabled={decreaseDisabled}
-                              className={`flex h-7 w-7 items-center justify-center rounded-lg border bg-white font-extrabold transition-all ${
-                                decreaseDisabled
-                                  ? 'cursor-not-allowed text-slate-300'
-                                  : 'text-slate-600 hover:bg-slate-100'
-                              }`}
-                            >
-                              -
-                            </button>
-                            <span className="w-8 text-center font-mono text-sm font-extrabold text-slate-800">
-                              {currentQty}
-                            </span>
-                            <button
-                              onClick={() =>
-                                handleQuantityChange(service.id, 1, { maxQty })
-                              }
-                              disabled={increaseDisabled}
-                              className={`flex h-7 w-7 items-center justify-center rounded-lg border bg-white font-extrabold transition-all ${
-                                increaseDisabled
-                                  ? 'cursor-not-allowed text-slate-300'
-                                  : 'text-slate-600 hover:bg-slate-100'
-                              }`}
-                            >
-                              +
-                            </button>
-                          </div>
+                          {isLockedClubRental ? (
+                            <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-center shadow-sm">
+                              <div className="font-mono text-sm font-extrabold text-emerald-800">
+                                {totalRentedClubQty}
+                              </div>
+                              <div className="text-[10px] font-bold text-emerald-700">
+                                ตามรายการที่เลือกไว้
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center space-x-2 rounded-xl border bg-slate-50 p-1 shadow-sm">
+                              <button
+                                onClick={() =>
+                                  handleQuantityChange(service.id, -1, { maxQty })
+                                }
+                                disabled={decreaseDisabled}
+                                className={`flex h-7 w-7 items-center justify-center rounded-lg border bg-white font-extrabold transition-all ${
+                                  decreaseDisabled
+                                    ? 'cursor-not-allowed text-slate-300'
+                                    : 'text-slate-600 hover:bg-slate-100'
+                                }`}
+                              >
+                                -
+                              </button>
+                              <span className="w-8 text-center font-mono text-sm font-extrabold text-slate-800">
+                                {currentQty}
+                              </span>
+                              <button
+                                onClick={() =>
+                                  handleQuantityChange(service.id, 1, { maxQty })
+                                }
+                                disabled={increaseDisabled}
+                                className={`flex h-7 w-7 items-center justify-center rounded-lg border bg-white font-extrabold transition-all ${
+                                  increaseDisabled
+                                    ? 'cursor-not-allowed text-slate-300'
+                                    : 'text-slate-600 hover:bg-slate-100'
+                                }`}
+                              >
+                                +
+                              </button>
+                            </div>
+                          )}
 
                           <span className="w-24 text-right font-mono text-sm font-extrabold text-slate-800">
                             {(currentQty * priceRate).toLocaleString()} ฿
@@ -432,7 +661,7 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
                           )}
 
                           <div className="mt-2 text-right text-[11px] font-medium text-emerald-700/80">
-                            เพิ่มจำนวนได้สูงสุด {totalRentedClubQty} ชิ้นตามรายการไม้ที่เลือกไว้
+                            จำนวนค่าเช่าไม้กอล์ฟถูกล็อกตามรายการที่เลือกไว้ตอนจอง
                           </div>
                         </div>
                       )}
@@ -449,19 +678,33 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
               </div>
 
               <div className="flex flex-col justify-between gap-3 text-xs text-slate-400 sm:flex-row sm:items-center">
-                <span>แต้มสะสมสมาชิกคงเหลือ: {booking.Points_Balance || 0} แต้ม</span>
+                <span>แต้มสะสมสมาชิกคงเหลือ: {formatPoints(availableMemberPoints)} แต้ม</span>
                 <div className="flex items-center space-x-2">
                   <span className="font-semibold text-slate-500">ส่วนลดแต้ม:</span>
                   <input
                     type="number"
+                    min="0"
+                    step="1"
                     value={safeUsedPoints}
-                    max={booking.Points_Balance || 0}
-                    onChange={(e) => setUsedPoints(Math.max(0, Number(e.target.value) || 0))}
+                    max={Math.floor(availableMemberPoints)}
+                    onChange={(e) => setUsedPoints(Math.floor(Math.max(0, Number(e.target.value) || 0)))}
                     className="w-20 rounded-lg border border-slate-200 bg-white py-1 text-center font-mono text-sm font-bold text-slate-800 focus:border-emerald-500 focus:outline-none"
                   />
                   <span>แต้ม</span>
                 </div>
               </div>
+              {safeUsedPoints > 0 && (
+                <div className="space-y-1 text-xs font-bold text-slate-500">
+                  <div className="flex justify-between">
+                    <span>แต้มที่ถูกใช้จริง:</span>
+                    <span>{redeemedPoints.toLocaleString()} แต้ม</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>มูลค่าส่วนลดจากแต้ม:</span>
+                    <span>{safePointDiscount.toLocaleString()} บาท</span>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-2 flex flex-col gap-1 border-t border-slate-200/80 pt-3 font-extrabold text-slate-800 sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-base text-slate-700">ยอดเงินรวมชำระสุทธิ:</span>
@@ -469,6 +712,12 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
                   {netAmount.toLocaleString()} บาท
                 </span>
               </div>
+              {memberUserId && pointSettings?.Earning_Is_Active && (
+                <div className="flex justify-between rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
+                  <span>แต้มที่จะได้รับหลังชำระ</span>
+                  <span>+{formatPoints(earnedPoints)} PTS</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -563,9 +812,14 @@ function LanePaymentModal({ booking, onClose, setAlert }) {
               </button>
               <button
                 onClick={handleConfirmPayment}
-                className="flex-[2] whitespace-nowrap rounded-xl bg-emerald-600 py-3 text-center text-sm font-extrabold text-white shadow-md transition-all hover:bg-emerald-700 active:scale-95"
+                disabled={isProcessing}
+                className={`flex-[2] whitespace-nowrap rounded-xl py-3 text-center text-sm font-extrabold text-white shadow-md transition-all active:scale-95 ${
+                  isProcessing
+                    ? 'cursor-not-allowed bg-slate-400'
+                    : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
               >
-                ยืนยันปิดยอดบิล & เคลียร์เลน
+                {isProcessing ? 'กำลังบันทึก...' : 'ยืนยันปิดยอดบิล & เคลียร์เลน'}
               </button>
             </div>
           </div>

@@ -169,7 +169,7 @@ function ShopClosureManagement() {
   }
 
   return (
-    <div className="relative rounded-3xl border border-slate-100 bg-white p-4 text-left font-sans shadow-sm sm:p-6">
+    <div className="relative w-full max-w-[1600px] mx-auto rounded-[1.75rem] border border-slate-200 bg-white p-5 text-left font-sans shadow-sm sm:p-8">
       <div className="mb-6 border-b border-slate-200 pb-4">
         <h2 className="text-xl font-black uppercase tracking-tight text-slate-800">
           ตั้งวันปิดร้านล่วงหน้า

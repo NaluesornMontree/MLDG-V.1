@@ -3,7 +3,7 @@ import { db } from '../firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { CheckIcon, UserIcon } from './AppIcons';
 
-function OtherIncomeModal({ isOpen, onClose, setAlert }) {
+function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
   const [customerForm, setCustomerForm] = useState({
     customerName: '',
     customerPhone: '',
@@ -141,6 +141,10 @@ function OtherIncomeModal({ isOpen, onClose, setAlert }) {
         Guest_Count: Number(customerForm.guestCount),
         Description: customerForm.description.trim(), // บันทึกหมายเหตุลงฐานข้อมูล
         Payment_Date: serverTimestamp(),
+        Cashier_ID: cashierInfo?.id || '',
+        Cashier_Name: cashierInfo?.name || 'ไม่ระบุชื่อผู้รับชำระ',
+        Cashier_Role: cashierInfo?.role || '',
+        Cashier_Email: cashierInfo?.email || '',
         Total_Amount: totalAmount,
         Used_Points: 0,
         Point_Discount: 0,

@@ -9,7 +9,7 @@ function CustomerManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [editingCustomer, setEditingCustomer] = useState(null);
-  const [editForm, setEditForm] = useState({ FullName: '', PhoneNumber: '' });
+  const [editForm, setEditForm] = useState({ FullName: '', PhoneNumber: '', Points_Balance: '' });
   const [alertPopup, setAlertPopup] = useState({
     isOpen: false,
     type: 'info',
@@ -36,6 +36,7 @@ function CustomerManagement() {
             Email: data.Email || data.email || '',
             FullName: data.FullName || data.displayName || '',
             PhoneNumber: data.PhoneNumber || data.phone || '',
+            Points_Balance: data.Points_Balance ?? data.points_balance ?? 0,
             Is_Active: data.Is_Active ?? data.isActive ?? true
           });
         }
@@ -62,16 +63,30 @@ function CustomerManagement() {
     setEditingCustomer(customer.id);
     setEditForm({
       FullName: customer.FullName || '',
-      PhoneNumber: customer.PhoneNumber || ''
+      PhoneNumber: customer.PhoneNumber || '',
+      Points_Balance: customer.Points_Balance ?? 0
     });
   };
 
   const handleUpdate = async () => {
+    const pointsValue = Number(editForm.Points_Balance);
+    if (!Number.isFinite(pointsValue) || pointsValue < 0) {
+      setAlertPopup({
+        isOpen: true,
+        type: 'warning',
+        title: 'ข้อมูลไม่ถูกต้อง',
+        message: 'กรุณากรอกแต้มสะสมเป็นตัวเลขตั้งแต่ 0 ขึ้นไป',
+        onConfirm: () => setAlertPopup((prev) => ({ ...prev, isOpen: false }))
+      });
+      return;
+    }
+
     try {
       const customerRef = doc(db, 'users', editingCustomer);
       await updateDoc(customerRef, {
         FullName: editForm.FullName,
-        PhoneNumber: editForm.PhoneNumber
+        PhoneNumber: editForm.PhoneNumber,
+        Points_Balance: pointsValue
       });
       setAlertPopup({
         isOpen: true,
@@ -164,6 +179,9 @@ function CustomerManagement() {
 
   const normalizeText = (value) => value.toString().toLowerCase().trim();
   const normalizePhone = (value) => value.toString().replace(/\D/g, '');
+  const formatPoints = (value) => Number(value || 0).toLocaleString(undefined, {
+    maximumFractionDigits: 2
+  });
 
   const getCustomerName = (customer) => (
     customer.FullName || customer.Email || customer.PhoneNumber || ''
@@ -251,6 +269,9 @@ function CustomerManagement() {
                     <span className="text-[11px] text-slate-400 font-bold break-all">
                       {customer.Email || 'ไม่มีอีเมล'} | {customer.PhoneNumber || 'ไม่มีเบอร์โทร'}
                     </span>
+                    <span className="mt-1 text-[11px] font-black text-amber-600">
+                      แต้มสะสม {formatPoints(customer.Points_Balance)} PTS
+                    </span>
                   </div>
                 </div>
 
@@ -328,6 +349,18 @@ function CustomerManagement() {
                   }}
                   className={s.input}
                   maxLength={10}
+                />
+              </div>
+              <div>
+                <label className={s.inputLabel}>แต้มสะสม (Points Balance)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editForm.Points_Balance}
+                  onChange={(e) => setEditForm({ ...editForm, Points_Balance: e.target.value })}
+                  className={s.input}
+                  placeholder="0.00"
                 />
               </div>
             </div>

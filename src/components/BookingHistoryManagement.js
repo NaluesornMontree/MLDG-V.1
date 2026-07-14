@@ -55,6 +55,14 @@ function getRowCustomerName(booking) {
   return booking.customerName || booking.FullName || 'ไม่ระบุชื่อ';
 }
 
+function getCashierLabel(payment) {
+  const name = payment?.Cashier_Name || payment?.cashierName || payment?.Processed_By_Name || '';
+  const role = payment?.Cashier_Role || payment?.cashierRole || payment?.Processed_By_Role || '';
+  if (!payment) return 'ยังไม่มีข้อมูลการชำระเงิน';
+  if (!name && !role) return 'ไม่ระบุผู้รับชำระ';
+  return `${name || 'ไม่ระบุชื่อ'}${role ? ` (${String(role).toUpperCase()})` : ''}`;
+}
+
 function formatCreatedAt(createdAt) {
   if (!createdAt) return 'ไม่มีเวลาบันทึก';
 
@@ -88,6 +96,19 @@ function formatCreatedAt(createdAt) {
   return 'ไม่มีเวลาบันทึก';
 }
 
+function escapeReceiptText(value) {
+  return String(value ?? '-')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function formatReceiptMoney(value) {
+  return `${Number(value || 0).toLocaleString()} บาท`;
+}
+
 function BookingHistoryManagement() {
   const s = theme.admin;
   const [bookings, setBookings] = useState([]);
@@ -96,16 +117,39 @@ function BookingHistoryManagement() {
   const [appliedSearch, setAppliedSearch] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthValue());
   const [selectedBooking, setSelectedBooking] = useState(null);
+  const [paymentsByBookingId, setPaymentsByBookingId] = useState({});
 
   useEffect(() => {
     const fetchBookings = async () => {
       setLoading(true);
       try {
-        const snapshot = await getDocs(collection(db, 'bookings'));
+        const [snapshot, paymentSnapshot] = await Promise.all([
+          getDocs(collection(db, 'bookings')),
+          getDocs(collection(db, 'payments'))
+        ]);
         const bookingList = snapshot.docs.map((docSnap) => ({
           id: docSnap.id,
           ...docSnap.data()
         }));
+
+        const paymentMap = {};
+        paymentSnapshot.docs.forEach((paymentDoc) => {
+          const payment = { id: paymentDoc.id, ...paymentDoc.data() };
+          const bookingId = payment.Booking_ID || payment.bookingId;
+          if (!bookingId) return;
+
+          const current = paymentMap[bookingId];
+          const paymentTime = payment.Payment_Date?.toDate
+            ? payment.Payment_Date.toDate().getTime()
+            : new Date(payment.Payment_Date || 0).getTime();
+          const currentTime = current?.Payment_Date?.toDate
+            ? current.Payment_Date.toDate().getTime()
+            : new Date(current?.Payment_Date || 0).getTime();
+
+          if (!current || paymentTime > currentTime) {
+            paymentMap[bookingId] = payment;
+          }
+        });
 
         bookingList.sort((a, b) => {
           const dateCompare = (b.bookingDate || '').localeCompare(a.bookingDate || '');
@@ -114,6 +158,7 @@ function BookingHistoryManagement() {
         });
 
         setBookings(bookingList);
+        setPaymentsByBookingId(paymentMap);
       } catch (error) {
         console.error('Error fetching booking history:', error);
       }
@@ -156,7 +201,9 @@ function BookingHistoryManagement() {
         Array.isArray(booking.selectedLanes) ? booking.selectedLanes.join(', ') : '',
         booking.bookingDate,
         booking.status,
-        booking.bookingType
+        booking.bookingType,
+        paymentsByBookingId[booking.id]?.Cashier_Name,
+        paymentsByBookingId[booking.id]?.Cashier_Role
       ]
         .filter(Boolean)
         .join(' ')
@@ -164,7 +211,7 @@ function BookingHistoryManagement() {
 
       return haystack.includes(keyword);
     });
-  }, [appliedSearch, bookings, selectedMonth]);
+  }, [appliedSearch, bookings, paymentsByBookingId, selectedMonth]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -174,6 +221,125 @@ function BookingHistoryManagement() {
   const handleClearSearch = () => {
     setSearchInput('');
     setAppliedSearch('');
+  };
+
+  const selectedBookingPayment = selectedBooking ? paymentsByBookingId[selectedBooking.id] : null;
+
+  const handleSaveReceipt = () => {
+    if (!selectedBooking) return;
+    if (!selectedBookingPayment || selectedBookingPayment.status === 'cancelled') {
+      alert('ยังไม่สามารถบันทึกใบเสร็จได้ เนื่องจากรายการนี้ยังไม่ได้รับการชำระเงิน');
+      return;
+    }
+
+    const receiptWindow = window.open('', '_blank', 'width=900,height=900');
+    if (!receiptWindow) {
+      alert('ไม่สามารถเปิดหน้าบันทึกใบเสร็จได้ กรุณาอนุญาต popup ในเบราว์เซอร์');
+      return;
+    }
+
+    const laneLabel = selectedBooking.selectedLanes?.length
+      ? `เลน ${selectedBooking.selectedLanes.join(', ')}`
+      : `เลน ${selectedBooking.laneNumber || '-'}`;
+    const timeLabel = Array.isArray(selectedBooking.timeSlots) && selectedBooking.timeSlots.length > 0
+      ? selectedBooking.timeSlots.join(', ')
+      : '-';
+    const rentedClubsHtml = Array.isArray(selectedBooking.rentedClubs) && selectedBooking.rentedClubs.length > 0
+      ? selectedBooking.rentedClubs.map((club) => `
+          <tr>
+            <td>${escapeReceiptText(club.Club_Name || '-')}</td>
+            <td>${escapeReceiptText(club.Club_Type || '-')}</td>
+            <td class="right">${Number(club.qty || 0).toLocaleString()} ชิ้น</td>
+          </tr>
+        `).join('')
+      : '<tr><td colspan="3" class="muted center">ไม่มีรายการเช่าไม้กอล์ฟ</td></tr>';
+    const paymentItemsHtml = Array.isArray(selectedBookingPayment.Items_List) && selectedBookingPayment.Items_List.length > 0
+      ? selectedBookingPayment.Items_List.map((item) => `
+          <tr>
+            <td>${escapeReceiptText(item.item_name || item.name || '-')}</td>
+            <td class="right">${Number(item.qty || 0).toLocaleString()}</td>
+            <td class="right">${formatReceiptMoney(item.total || item.price || 0)}</td>
+          </tr>
+        `).join('')
+      : '<tr><td colspan="3" class="muted center">ยังไม่มีรายการชำระเงิน</td></tr>';
+
+    receiptWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Booking Receipt - ${escapeReceiptText(selectedBooking.id)}</title>
+          <style>
+            * { box-sizing: border-box; }
+            @page { size: A4; margin: 8mm; }
+            body { margin: 0; padding: 10px; color: #0f172a; font-family: Arial, Tahoma, sans-serif; background: #f8fafc; }
+            .receipt { max-width: 780px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; overflow: hidden; }
+            .header { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+            .eyebrow { color: #059669; font-size: 9px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+            h1 { margin: 3px 0 0; font-size: 18px; }
+            .muted { color: #64748b; }
+            .content { padding: 12px 16px; }
+            .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+            .box { border: 1px solid #e2e8f0; border-radius: 10px; padding: 6px 8px; background: #f8fafc; min-height: 42px; }
+            .label { color: #64748b; font-size: 9px; font-weight: 800; margin-bottom: 2px; }
+            .value { font-size: 11px; font-weight: 900; word-break: break-word; line-height: 1.25; }
+            h2 { font-size: 12px; margin: 10px 0 4px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+            th, td { border-bottom: 1px solid #e2e8f0; padding: 4px 6px; font-size: 10px; text-align: left; line-height: 1.25; }
+            th { color: #475569; background: #f8fafc; font-size: 9px; text-transform: uppercase; }
+            .right { text-align: right; }
+            .center { text-align: center; }
+            .total { display: grid; grid-template-columns: 1fr 1fr; column-gap: 20px; row-gap: 2px; margin-top: 10px; border: 1px solid #d1fae5; background: #ecfdf5; border-radius: 10px; padding: 8px 10px; }
+            .row { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; font-size: 10px; font-weight: 700; line-height: 1.25; }
+            .net { grid-column: 1 / -1; border-top: 1px solid #bbf7d0; margin-top: 4px; padding-top: 6px; font-size: 14px; font-weight: 900; color: #047857; }
+            .footer { padding: 8px 16px 10px; color: #64748b; font-size: 9px; text-align: center; }
+            @media print {
+              body { padding: 0; background: #fff; }
+              .receipt { width: 100%; max-width: none; border-radius: 0; border: none; }
+              h2, table, .total, .grid { page-break-inside: avoid; break-inside: avoid; }
+            }
+          </style>
+        </head>
+        <body>
+          <main class="receipt">
+            <section class="header">
+              <div class="eyebrow">Muang Loei Golf</div>
+              <h1>ใบเสร็จรายละเอียดการจอง</h1>
+              <div class="muted">เลขที่รายการ: ${escapeReceiptText(selectedBooking.id)}</div>
+            </section>
+            <section class="content">
+              <div class="grid">
+                <div class="box"><div class="label">วันที่เข้าใช้</div><div class="value">${escapeReceiptText(selectedBooking.bookingDate || '-')}</div></div>
+                <div class="box"><div class="label">สถานะ</div><div class="value">${escapeReceiptText(getStatusLabel(selectedBooking.status))}</div></div>
+                <div class="box"><div class="label">ชื่อผู้จอง</div><div class="value">${escapeReceiptText(getRowCustomerName(selectedBooking))}</div></div>
+                <div class="box"><div class="label">เบอร์โทรศัพท์</div><div class="value">${escapeReceiptText(selectedBooking.customerPhone || '-')}</div></div>
+                <div class="box"><div class="label">อีเมล</div><div class="value">${escapeReceiptText(selectedBooking.customerEmail || '-')}</div></div>
+                <div class="box"><div class="label">สร้างรายการเมื่อ</div><div class="value">${escapeReceiptText(formatCreatedAt(selectedBooking.createdAt))}</div></div>
+                <div class="box"><div class="label">เลนซ้อม</div><div class="value">${escapeReceiptText(laneLabel)}</div></div>
+                <div class="box"><div class="label">ช่วงเวลาที่จอง</div><div class="value">${escapeReceiptText(timeLabel)}</div></div>
+                <div class="box"><div class="label">บริการเสริม</div><div class="value">ผู้สอนพื้นฐานการเล่นกอล์ฟ: ${selectedBooking.needsInstructor ? 'ต้องการ' : 'ไม่ต้องการ'} | เช่าไม้: ${selectedBooking.needsClubRent ? 'ต้องการ' : 'ไม่ต้องการ'}</div></div>
+              </div>
+              <h2>รายการไม้กอล์ฟที่เลือกเช่า</h2>
+              <table><thead><tr><th>รายการ</th><th>ประเภท</th><th class="right">จำนวน</th></tr></thead><tbody>${rentedClubsHtml}</tbody></table>
+              <h2>รายการชำระเงิน</h2>
+              <table><thead><tr><th>รายการ</th><th class="right">จำนวน</th><th class="right">ยอดเงิน</th></tr></thead><tbody>${paymentItemsHtml}</tbody></table>
+              <div class="total">
+                <div class="row"><span>ยอดรวม</span><span>${formatReceiptMoney(selectedBookingPayment.Total_Amount || 0)}</span></div>
+                <div class="row"><span>ส่วนลดจากแต้ม</span><span>${formatReceiptMoney(selectedBookingPayment.Point_Discount || 0)}</span></div>
+                <div class="row"><span>แต้มที่ใช้</span><span>${Number(selectedBookingPayment.Used_Points || 0).toLocaleString()} PTS</span></div>
+                <div class="row"><span>แต้มที่ได้รับ</span><span>+${Number(selectedBookingPayment.Earned_Points || 0).toLocaleString()} PTS</span></div>
+                <div class="row"><span>วิธีชำระเงิน</span><span>${escapeReceiptText(selectedBookingPayment.Payment_Method || '-')}</span></div>
+                <div class="row"><span>ผู้รับชำระเงิน</span><span>${escapeReceiptText(getCashierLabel(selectedBookingPayment))}</span></div>
+                <div class="row net"><span>ยอดสุทธิที่ชำระ</span><span>${formatReceiptMoney(selectedBookingPayment.Net_Amount || 0)}</span></div>
+              </div>
+            </section>
+            <section class="footer">เอกสารนี้สร้างจากระบบ Muang Loei Golf เมื่อ ${new Date().toLocaleString('th-TH')}</section>
+          </main>
+          <script>window.addEventListener('load', () => setTimeout(() => window.print(), 300));</script>
+        </body>
+      </html>
+    `);
+    receiptWindow.document.close();
   };
 
   if (loading) {
@@ -208,7 +374,7 @@ function BookingHistoryManagement() {
               type="search"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="ค้นหาชื่อลูกค้า, อีเมล, เบอร์โทร, เลน, สถานะ..."
+              placeholder="ค้นหาชื่อลูกค้า, อีเมล, เบอร์โทร"
               className="w-full rounded-2xl border-2 border-slate-200 bg-white pl-11 pr-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500"
             />
           </div>
@@ -390,7 +556,7 @@ function BookingHistoryManagement() {
             <div className="border-b border-slate-200 bg-white px-4 py-3 sm:px-5 sm:py-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="text-lg sm:text-xl font-black text-slate-800">รายละเอียดการจอง</h3>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-800">ใบเสร็จรายละเอียดการจอง</h3>
                   <p className="mt-0.5 text-[11px] sm:text-xs font-bold text-slate-400">
                     วันที่จอง: {selectedBooking.bookingDate || '-'} | สร้างเมื่อ {formatCreatedAt(selectedBooking.createdAt)}
                   </p>
@@ -481,7 +647,7 @@ function BookingHistoryManagement() {
                       </span>
                     </div>
                     <div className={`rounded-xl border px-3 py-2.5 ${selectedBooking.needsInstructor ? 'border-indigo-200 bg-indigo-50' : 'border-slate-100 bg-slate-50'}`}>
-                      <div className="text-[10px] font-black text-slate-400 mb-1">ผู้สอนพื้นฐาน</div>
+                      <div className="text-[10px] font-black text-slate-400 mb-1">ผู้สอนพื้นฐานการเล่นกอล์ฟ</div>
                       <div className={`text-sm font-black ${selectedBooking.needsInstructor ? 'text-indigo-700' : 'text-slate-500'}`}>
                         {selectedBooking.needsInstructor ? 'ต้องการ' : 'ไม่ต้องการ'}
                       </div>
@@ -492,12 +658,59 @@ function BookingHistoryManagement() {
                         {selectedBooking.needsClubRent ? 'ต้องการ' : 'ไม่ต้องการ'}
                       </div>
                     </div>
+                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                      <div className="text-[10px] font-black text-slate-400 mb-1">ผู้รับชำระเงิน</div>
+                      <div className="text-sm font-black text-slate-800 break-words">{getCashierLabel(selectedBookingPayment)}</div>
+                    </div>
                   </div>
+                </aside>
+
+                <aside className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Payment Summary</p>
+                  <h4 className="mt-0.5 text-sm font-black text-slate-800">รายการชำระเงินและสรุปยอด</h4>
+                  {!selectedBookingPayment ? (
+                    <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-xs font-bold text-slate-400">
+                      ยังไม่มีข้อมูลการชำระเงินสำหรับรายการนี้
+                    </div>
+                  ) : (
+                    <div className="mt-3 space-y-2 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                      <div className="flex justify-between text-sm font-bold text-slate-600">
+                        <span>ยอดรวม</span>
+                        <span>{Number(selectedBookingPayment.Total_Amount || 0).toLocaleString()} บาท</span>
+                      </div>
+                      <div className="flex justify-between text-sm font-bold text-slate-600">
+                        <span>ส่วนลดจากแต้ม</span>
+                        <span>{Number(selectedBookingPayment.Point_Discount || 0).toLocaleString()} บาท</span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2">
+                        <div className="rounded-xl bg-white px-3 py-2">
+                          <div className="text-[10px] font-black text-slate-400">แต้มที่ได้รับ</div>
+                          <div className="text-sm font-black text-emerald-800">+{Number(selectedBookingPayment.Earned_Points || 0).toLocaleString()} PTS</div>
+                        </div>
+                      </div>
+                      <div className="flex justify-between text-sm font-bold text-slate-600">
+                        <span>วิธีชำระเงิน</span>
+                        <span>{selectedBookingPayment.Payment_Method || '-'}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-slate-200 pt-3">
+                        <span className="text-base font-black text-slate-800">ยอดสุทธิที่ชำระ</span>
+                        <span className="text-xl font-black text-emerald-700">{Number(selectedBookingPayment.Net_Amount || 0).toLocaleString()} บาท</span>
+                      </div>
+                    </div>
+                  )}
                 </aside>
               </div>
             </div>
 
-            <div className="border-t border-slate-200 bg-white px-4 py-3 sm:px-5 flex justify-end">
+            <div className="border-t border-slate-200 bg-white px-4 py-3 sm:px-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={handleSaveReceipt}
+                disabled={!selectedBookingPayment || selectedBookingPayment.status === 'cancelled'}
+                className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-black text-white transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {!selectedBookingPayment || selectedBookingPayment.status === 'cancelled' ? 'รอรับชำระเงิน' : 'บันทึกใบเสร็จ'}
+              </button>
               <button
                 type="button"
                 onClick={() => setSelectedBooking(null)}

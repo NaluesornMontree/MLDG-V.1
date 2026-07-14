@@ -162,3 +162,18 @@ export function SaveIcon({ className = '' }) {
     </BaseIcon>
   );
 }
+
+export function StarIcon({ className = '', filled = false }) {
+  return (
+    <BaseIcon className={className}>
+      <path
+        d="M12 3.8L14.55 8.96L20.25 9.79L16.12 13.82L17.1 19.5L12 16.82L6.9 19.5L7.88 13.82L3.75 9.79L9.45 8.96L12 3.8Z"
+        fill={filled ? 'currentColor' : 'none'}
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </BaseIcon>
+  );
+}

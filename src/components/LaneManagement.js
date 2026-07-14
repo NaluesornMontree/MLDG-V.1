@@ -1,26 +1,38 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { db } from '../firebase'; 
-import { collection, getDocs, setDoc, doc, updateDoc, query, where, Timestamp, deleteDoc, addDoc } from "firebase/firestore"; 
+import { collection, getDocs, setDoc, doc, updateDoc, query, where, Timestamp, deleteDoc, addDoc, onSnapshot } from "firebase/firestore"; 
 import { theme } from '../styles/theme';
 import Popup from './Popup'; 
 import BookingDetailModal from './BookingDetailModal'; 
 import { CheckIcon, GolfIcon, UserIcon, WrenchIcon } from './AppIcons';
+import {
+  getClubName,
+  getClubPrice,
+  getClubRepairQty,
+  getClubTotalQty,
+  getClubType,
+  sortGolfClubsLikeInventory
+} from '../utils/golfClubUtils';
+import { areSelectedSlotsContiguous, isSelectedSlotsDraftValid } from '../utils/bookingTimeUtils';
 
-function LaneManagement({ userData, onCheckoutBooking }) { 
+function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLoginRequest = null }) { 
   const rawRole = userData?.Role || userData?.role || '';
   const isOwner = rawRole.trim().toLowerCase() === 'owner';
-
-  const [selectedDate, setSelectedDate] = useState(() => {
+  const getLocalDateValue = () => {
     const today = new Date();
     const offset = today.getTimezoneOffset();
-    const localToday = new Date(today.getTime() - (offset * 60 * 1000));
-    return localToday.toISOString().split('T')[0];
+    return new Date(today.getTime() - (offset * 60 * 1000)).toISOString().split('T')[0];
+  };
+
+  const [selectedDate, setSelectedDate] = useState(() => {
+    return getLocalDateValue();
   });
 
   const [bookingsList, setBookingsList] = useState([]); 
   const [baseLanes, setBaseLanes] = useState({}); 
   const [loading, setLoading] = useState(true);
   const [selectedSlots, setSelectedSlots] = useState({});
+  const [dragSelection, setDragSelection] = useState(null);
   const [isShopClosed, setIsShopClosed] = useState(false); 
 
   const [isWalkInModalOpen, setIsWalkInModalOpen] = useState(false);
@@ -52,7 +64,8 @@ function LaneManagement({ userData, onCheckoutBooking }) {
 
   const TOTAL_LANES = 15;
   const laneNumbers = Array.from({ length: TOTAL_LANES }, (_, i) => i + 1);
-  const isImmediateActivationMode = laneActionMode === 'walk-in';
+  const isSelectedDateToday = selectedDate === getLocalDateValue();
+  const isImmediateActivationMode = laneActionMode === 'walk-in' && isSelectedDateToday;
   const isPhoneBookingMode = laneActionMode === 'phone-booking';
   const walkInMemberStatusMessage = walkInLookupLoading
     ? 'กำลังตรวจสอบสมาชิก...'
@@ -67,6 +80,7 @@ function LaneManagement({ userData, onCheckoutBooking }) {
     "12:00-13:00", "13:00-14:00", "14:00-15:00", "15:00-16:00",
     "16:00-17:00", "17:00-18:00", "18:00-19:00"
   ];
+
 
   const getBorderColorById = (id) => {
     if (!id) return 'border-slate-400';
@@ -154,9 +168,93 @@ function LaneManagement({ userData, onCheckoutBooking }) {
   };
 
   useEffect(() => {
-    fetchData();
-    setSelectedSlots({}); 
+    setLoading(true);
+    setSelectedSlots({});
+
+    const [year, month, day] = selectedDate.split('-').map(Number);
+    const startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0);
+    const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
+    const startTimestamp = Timestamp.fromDate(startOfDay);
+    const endTimestamp = Timestamp.fromDate(endOfDay);
+
+    const loaded = {
+      closures: false,
+      lanes: false,
+      bookings: false
+    };
+
+    const finishInitialLoad = () => {
+      if (loaded.closures && loaded.lanes && loaded.bookings) {
+        setLoading(false);
+      }
+    };
+
+    const closureQuery = query(
+      collection(db, "shop_closures"),
+      where("date", ">=", startTimestamp),
+      where("date", "<=", endTimestamp)
+    );
+    const unsubscribeClosures = onSnapshot(closureQuery, (snapshot) => {
+      const activeClosureDoc = snapshot.docs.find((closureDoc) => {
+        const data = closureDoc.data();
+        return (data.status || 'active') === 'active';
+      });
+      setIsShopClosed(Boolean(activeClosureDoc));
+      loaded.closures = true;
+      finishInitialLoad();
+    }, (error) => {
+      console.error("Error listening shop closures:", error);
+      loaded.closures = true;
+      finishInitialLoad();
+    });
+
+    const unsubscribeLanes = onSnapshot(collection(db, "lanes"), (snapshot) => {
+      const lanesData = {};
+      snapshot.forEach((laneDoc) => {
+        const data = laneDoc.data();
+        if (data && data.laneNumber) {
+          lanesData[data.laneNumber.toString()] = data;
+        }
+      });
+      setBaseLanes(lanesData);
+      loaded.lanes = true;
+      finishInitialLoad();
+    }, (error) => {
+      console.error("Error listening lanes:", error);
+      loaded.lanes = true;
+      finishInitialLoad();
+    });
+
+    const bookingsQuery = query(collection(db, "bookings"), where("bookingDate", "==", selectedDate));
+    const unsubscribeBookings = onSnapshot(bookingsQuery, (snapshot) => {
+      const tempBookings = snapshot.docs.map((bookingDoc) => ({ id: bookingDoc.id, ...bookingDoc.data() }));
+      setBookingsList(tempBookings);
+      loaded.bookings = true;
+      finishInitialLoad();
+    }, (error) => {
+      console.error("Error listening bookings:", error);
+      loaded.bookings = true;
+      finishInitialLoad();
+    });
+
+    return () => {
+      unsubscribeClosures();
+      unsubscribeLanes();
+      unsubscribeBookings();
+    };
   }, [selectedDate]);
+
+  useEffect(() => {
+    if (!isSelectedDateToday && laneActionMode === 'walk-in') {
+      setLaneActionMode('phone-booking');
+    }
+  }, [isSelectedDateToday, laneActionMode]);
+
+  useEffect(() => {
+    const stopDragSelection = () => setDragSelection(null);
+    window.addEventListener('mouseup', stopDragSelection);
+    return () => window.removeEventListener('mouseup', stopDragSelection);
+  }, []);
 
   const getCellStatus = (laneNum, slot) => {
     if (isShopClosed) {
@@ -169,8 +267,15 @@ function LaneManagement({ userData, onCheckoutBooking }) {
 
     const matched = bookingsList.find(b => {
       const isStatusActive = b.status === 'pending' || b.status === 'confirmed' || b.status === 'occupied' || b.status === 'maintenance';
-      const hasLane = b.selectedLanes && b.selectedLanes.includes(laneNum);
-      const hasSlot = b.timeSlots && b.timeSlots.includes(slot);
+      const laneKey = `lane_${laneNum}`;
+      const detailedSlots = b.detailedSlots || b.Detailed_Slots || {};
+      const hasDetailedSlots = detailedSlots && Object.keys(detailedSlots).length > 0;
+      const hasLane = hasDetailedSlots
+        ? Array.isArray(detailedSlots[laneKey])
+        : b.selectedLanes && b.selectedLanes.includes(laneNum);
+      const hasSlot = hasDetailedSlots
+        ? detailedSlots[laneKey]?.includes(slot)
+        : b.timeSlots && b.timeSlots.includes(slot);
       return isStatusActive && hasLane && hasSlot;
     });
 
@@ -178,6 +283,27 @@ function LaneManagement({ userData, onCheckoutBooking }) {
       if (matched.status === 'maintenance') {
         return { status: 'maintenance', booking: { ...matched, laneNum } };
       }
+
+      if (matched.status === 'occupied') {
+        const activeDetailedSlots = matched.activeDetailedSlots || matched.Active_Detailed_Slots || null;
+        const activeTimeSlots = matched.activeTimeSlots || matched.Active_Time_Slots || null;
+        const activeLaneSlots = activeDetailedSlots?.[`lane_${laneNum}`] || [];
+        const hasScopedActiveSlots =
+          (activeDetailedSlots && Object.keys(activeDetailedSlots).length > 0) ||
+          (Array.isArray(activeTimeSlots) && activeTimeSlots.length > 0);
+
+        if (hasScopedActiveSlots) {
+          const isActiveForThisCell =
+            activeLaneSlots.includes(slot) ||
+            (!activeDetailedSlots && activeTimeSlots.includes(slot));
+
+          return {
+            status: isActiveForThisCell ? 'occupied' : 'booked',
+            booking: { ...matched, laneNum }
+          };
+        }
+      }
+
       return {
         status: matched.status === 'occupied' ? 'occupied' : 'booked',
         booking: { ...matched, laneNum }
@@ -250,6 +376,30 @@ function LaneManagement({ userData, onCheckoutBooking }) {
   };
 
   const handleCellClick = (laneNum, slot) => {
+    if (publicView) {
+      const cellInfo = getCellStatus(laneNum, slot);
+      const statusMessage = {
+        available: 'ช่องเวลานี้ยังว่าง หากต้องการจองกรุณาเข้าสู่ระบบก่อน',
+        booked: 'ช่องเวลานี้มีผู้จองแล้ว',
+        occupied: 'ช่องเวลานี้กำลังมีผู้ใช้งาน',
+        maintenance: 'ช่องเวลานี้ปิดปรับปรุง'
+      }[cellInfo.status] || 'ไม่สามารถทำรายการได้';
+
+      setAlertPopup({
+        isOpen: true,
+        type: cellInfo.status === 'available' ? 'info' : 'warning',
+        title: cellInfo.status === 'available' ? 'เลนว่าง' : 'สถานะเลนซ้อม',
+        message: statusMessage,
+        onConfirm: () => {
+          setAlertPopup(prev => ({ ...prev, isOpen: false }));
+          if (cellInfo.status === 'available' && onLoginRequest) {
+            onLoginRequest();
+          }
+        }
+      });
+      return;
+    }
+
     if (isShopClosed) {
       setAlertPopup({
         isOpen: true,
@@ -272,19 +422,76 @@ function LaneManagement({ userData, onCheckoutBooking }) {
 
     const laneKey = `lane_${laneNum}`;
     const currentLaneSlots = selectedSlots[laneKey] || [];
+    applyCellSelection(laneNum, slot, !currentLaneSlots.includes(slot));
+  };
 
-    if (currentLaneSlots.includes(slot)) {
-      const updated = currentLaneSlots.filter(s => s !== slot);
-      if (updated.length === 0) {
-        const copy = { ...selectedSlots };
-        delete copy[laneKey];
-        setSelectedSlots(copy);
-      } else {
-        setSelectedSlots({ ...selectedSlots, [laneKey]: updated });
+  const applyCellSelection = (laneNum, slot, shouldSelect) => {
+    if (publicView || isShopClosed) return;
+
+    const cellInfo = getCellStatus(laneNum, slot);
+    if (cellInfo.status !== 'available') return;
+
+    const laneKey = `lane_${laneNum}`;
+    setSelectedSlots((prevSelectedSlots) => {
+      const currentLaneSlots = prevSelectedSlots[laneKey] || [];
+
+      if (!shouldSelect && currentLaneSlots.includes(slot)) {
+        const updated = currentLaneSlots.filter(s => s !== slot);
+        if (updated.length === 0) {
+          const copy = { ...prevSelectedSlots };
+          delete copy[laneKey];
+          return copy;
+        }
+        const nextSelectedSlots = { ...prevSelectedSlots, [laneKey]: updated };
+        if (!isSelectedSlotsDraftValid(nextSelectedSlots, TIME_SLOTS)) {
+          setAlertPopup({
+            isOpen: true,
+            type: 'warning',
+            title: 'เวลาไม่ต่อเนื่อง',
+            message: 'ไม่สามารถเลือกแบบข้ามเลนข้ามเวลาได้ ทุกเลนที่เลือกต้องใช้ช่วงเวลาเดียวกันและเวลาต้องติดกัน',
+            onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
+          });
+          return prevSelectedSlots;
+        }
+        return nextSelectedSlots;
       }
-    } else {
-      setSelectedSlots({ ...selectedSlots, [laneKey]: [...currentLaneSlots, slot] });
+
+      if (shouldSelect && !currentLaneSlots.includes(slot)) {
+        const nextSelectedSlots = { ...prevSelectedSlots, [laneKey]: [...currentLaneSlots, slot] };
+        if (!isSelectedSlotsDraftValid(nextSelectedSlots, TIME_SLOTS)) {
+          setAlertPopup({
+            isOpen: true,
+            type: 'warning',
+            title: 'เลือกข้ามเลนข้ามเวลาไม่ได้',
+            message: 'ไม่สามารถเลือกแบบข้ามเลนข้ามเวลาได้ ทุกเลนที่เลือกต้องใช้ช่วงเวลาเดียวกันและเวลาต้องติดกัน',
+            onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
+          });
+          return prevSelectedSlots;
+        }
+        return nextSelectedSlots;
+      }
+
+      return prevSelectedSlots;
+    });
+  };
+
+  const handleCellMouseDown = (laneNum, slot) => {
+    if (publicView) return;
+    const cellInfo = getCellStatus(laneNum, slot);
+    if (cellInfo.status !== 'available') {
+      handleCellClick(laneNum, slot);
+      return;
     }
+
+    const laneKey = `lane_${laneNum}`;
+    const shouldSelect = !(selectedSlots[laneKey] || []).includes(slot);
+    setDragSelection({ shouldSelect });
+    applyCellSelection(laneNum, slot, shouldSelect);
+  };
+
+  const handleCellMouseEnter = (laneNum, slot) => {
+    if (!dragSelection) return;
+    applyCellSelection(laneNum, slot, dragSelection.shouldSelect);
   };
 
   const getTotalSelectedSlotsCount = () => {
@@ -295,10 +502,32 @@ function LaneManagement({ userData, onCheckoutBooking }) {
     return Object.keys(selectedSlots).map(key => parseInt(key.replace('lane_', ''))).sort((a,b)=>a-b);
   };
 
+  const hasMoreSelectedLanesThanWalkInGuests = () => {
+    const selectedLaneCount = getSelectedLanesArray().length;
+    const guestCount = Number(walkInGuests || 0);
+    return selectedLaneCount > guestCount;
+  };
+
+  const openLaneActionForm = () => {
+    if (!areSelectedSlotsContiguous(selectedSlots, TIME_SLOTS)) {
+      setAlertPopup({
+        isOpen: true,
+        type: 'warning',
+        title: 'เลือกเวลาไม่ครบทุกเลน',
+        message: 'กรุณาเลือกช่วงเวลาให้เหมือนกันทุกเลนก่อนดำเนินการต่อ เช่น เลน 1 และเลน 2 ต้องเป็นเวลา 08:00-10:00 เหมือนกัน',
+        onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
+      });
+      return;
+    }
+
+    resetLaneActionForm('walk-in');
+    setIsWalkInModalOpen(true);
+  };
+
   const isMemberLaneActivation = Boolean(walkInMemberInfo);
 
   const resetLaneActionForm = (mode = 'walk-in') => {
-    setLaneActionMode(mode);
+    setLaneActionMode(isSelectedDateToday ? mode : 'phone-booking');
     setWalkInName('');
     setWalkInEmail('');
     setWalkInPhone('');
@@ -319,7 +548,7 @@ function LaneManagement({ userData, onCheckoutBooking }) {
       const rentedQtyMap = {};
 
       bookingsList.forEach((booking) => {
-        if (booking.status === 'occupied' && Array.isArray(booking.rentedClubs)) {
+        if (['pending', 'confirmed', 'occupied'].includes(booking.status) && Array.isArray(booking.rentedClubs)) {
           booking.rentedClubs.forEach((clubItem) => {
             const clubId = clubItem.clubId;
             const qty = Number(clubItem.qty || 0);
@@ -330,21 +559,22 @@ function LaneManagement({ userData, onCheckoutBooking }) {
 
       const inventory = clubSnap.docs.map((clubDoc) => {
         const data = clubDoc.data();
-        const totalQty = Number(data.Quantity_Total || 0);
-        const repairQty = Number(data.Repair_Club_Total || 0);
+        const totalQty = getClubTotalQty(data);
+        const repairQty = getClubRepairQty(data);
         const unavailableQty = rentedQtyMap[clubDoc.id] || 0;
         const availableQty = Math.max(0, totalQty - repairQty - unavailableQty);
 
         return {
           id: clubDoc.id,
-          name: data.Club_Name || 'ไม่ระบุชื่อไม้กอล์ฟ',
-          type: data.Club_Type || '',
-          price: Number(data.price || 100),
-          available: availableQty
+          name: getClubName(data),
+          type: getClubType(data),
+          price: getClubPrice(data),
+          available: availableQty,
+          isActive: data.Is_Active !== false
         };
-      }).filter((club) => club.available > 0);
+      }).filter((club) => club.isActive && club.available > 0);
 
-      setWalkInClubInventory(inventory);
+      setWalkInClubInventory(sortGolfClubsLikeInventory(inventory));
     } catch (error) {
       console.error("Error fetching walk-in club inventory:", error);
       setAlertPopup({
@@ -406,6 +636,16 @@ function LaneManagement({ userData, onCheckoutBooking }) {
       });
       return;
     }
+    if (hasMoreSelectedLanesThanWalkInGuests()) {
+      setAlertPopup({
+        isOpen: true,
+        type: 'warning',
+        title: 'จำนวนเลนมากกว่าจำนวนผู้เข้าใช้',
+        message: 'จำนวนเลนที่เลือกมากกว่าจำนวนผู้เข้าใช้งาน กรุณาปรับจำนวนผู้เข้าใช้งานหรือเลือกเลนให้น้อยลง',
+        onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
+      });
+      return;
+    }
 
     await fetchWalkInClubInventory();
     setIsWalkInModalOpen(false);
@@ -414,6 +654,17 @@ function LaneManagement({ userData, onCheckoutBooking }) {
 
   const handleSaveWalkInSubmission = async () => {
     if (isShopClosed) return;
+    if (!isSelectedDateToday && laneActionMode === 'walk-in') {
+      setLaneActionMode('phone-booking');
+      setAlertPopup({
+        isOpen: true,
+        type: 'warning',
+        title: 'เลือกได้เฉพาะจองล่วงหน้า',
+        message: 'วันที่เลือกไม่ใช่วันที่ปัจจุบัน ระบบจึงทำรายการได้เฉพาะการจองล่วงหน้าเท่านั้น',
+        onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
+      });
+      return;
+    }
     if (!walkInName.trim()) {
       setAlertPopup({
         isOpen: true,
@@ -439,6 +690,28 @@ function LaneManagement({ userData, onCheckoutBooking }) {
       const lanesArray = getSelectedLanesArray();
       const allTimeSlots = Array.from(new Set(Object.values(selectedSlots).flat())).sort(); 
       const normalizedEmail = walkInEmail.trim();
+
+      if (lanesArray.length > Number(walkInGuests || 0)) {
+        setAlertPopup({
+          isOpen: true,
+          type: 'warning',
+          title: 'จำนวนเลนมากกว่าจำนวนผู้เข้าใช้',
+          message: 'จำนวนเลนที่เลือกมากกว่าจำนวนผู้เข้าใช้งาน กรุณาปรับจำนวนผู้เข้าใช้งานหรือเลือกเลนให้น้อยลง',
+          onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
+        });
+        return;
+      }
+
+      if (!areSelectedSlotsContiguous(selectedSlots, TIME_SLOTS)) {
+        setAlertPopup({
+          isOpen: true,
+          type: 'warning',
+          title: 'เลือกข้ามเลนข้ามเวลาไม่ได้',
+          message: 'ไม่สามารถเลือกแบบข้ามเลนข้ามเวลาได้ ทุกเลนที่เลือกต้องใช้ช่วงเวลาเดียวกันและเวลาต้องติดกัน',
+          onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
+        });
+        return;
+      }
 
       const bookingStatus = isImmediateActivationMode ? 'occupied' : 'confirmed';
       const bookingType = isImmediateActivationMode
@@ -551,16 +824,62 @@ function LaneManagement({ userData, onCheckoutBooking }) {
     }
   };
 
+  const getUnionSlotsFromDetailedSlots = (detailedSlots = {}) => (
+    Array.from(new Set(Object.values(detailedSlots).flat())).sort()
+  );
+
+  const getBookingDetailedSlots = (booking = {}) => {
+    const existingDetailedSlots = booking.detailedSlots || booking.Detailed_Slots || {};
+    if (existingDetailedSlots && Object.keys(existingDetailedSlots).length > 0) {
+      return existingDetailedSlots;
+    }
+
+    const lanes = Array.isArray(booking.selectedLanes) && booking.selectedLanes.length > 0
+      ? booking.selectedLanes
+      : booking.laneNum || booking.laneNumber
+        ? String(booking.laneNum || booking.laneNumber)
+          .split(',')
+          .map((lane) => Number(lane.trim()))
+          .filter(Number.isFinite)
+        : [];
+    const slots = Array.isArray(booking.timeSlots) ? booking.timeSlots : [];
+
+    return lanes.reduce((acc, lane) => {
+      acc[`lane_${lane}`] = slots;
+      return acc;
+    }, {});
+  };
+
   const handleCheckInBooking = async () => {
     if (!currentBooking) return;
     try {
-      await updateDoc(doc(db, "bookings", currentBooking.id), { status: 'occupied' });
+      const currentActiveDetailedSlots = currentBooking.activeDetailedSlots || currentBooking.Active_Detailed_Slots || {};
+      const currentActiveTimeSlots = currentBooking.activeTimeSlots || currentBooking.Active_Time_Slots || [];
+      const bookingDetailedSlots = getBookingDetailedSlots(currentBooking);
+      const nextActiveDetailedSlots = Object.keys(bookingDetailedSlots).reduce((acc, laneKey) => {
+        acc[laneKey] = Array.from(new Set([
+          ...(currentActiveDetailedSlots[laneKey] || []),
+          ...(bookingDetailedSlots[laneKey] || [])
+        ])).sort();
+        return acc;
+      }, { ...currentActiveDetailedSlots });
+      const nextActiveTimeSlots = Array.from(new Set([
+        ...currentActiveTimeSlots,
+        ...getUnionSlotsFromDetailedSlots(bookingDetailedSlots)
+      ])).sort();
+
+      await updateDoc(doc(db, "bookings", currentBooking.id), {
+        status: 'occupied',
+        activeTimeSlots: nextActiveTimeSlots,
+        activeDetailedSlots: nextActiveDetailedSlots,
+        checkedInAt: new Date().toISOString()
+      });
       setIsDetailModalOpen(false);
       setAlertPopup({
         isOpen: true,
         type: 'info',
         title: 'Check-in สำเร็จ',
-        message: 'ยืนยันการเข้าใช้งานเลนซ้อมเรียบร้อยแล้ว',
+        message: 'ยืนยันการเข้าใช้งานทั้งรายการจองเรียบร้อยแล้ว',
         onConfirm: () => { setAlertPopup(prev => ({ ...prev, isOpen: false })); fetchData(); }
       });
     } catch (error) {
@@ -612,7 +931,11 @@ function LaneManagement({ userData, onCheckoutBooking }) {
             setIsDetailModalOpen(false);
             setAlertPopup(prev => ({ ...prev, isOpen: false }));
             if (onCheckoutBooking) {
-              onCheckoutBooking(currentBooking.id);
+              onCheckoutBooking({
+                bookingId: currentBooking.id,
+                laneNumber: focusedCellInfo?.laneNumber || currentBooking.laneNum,
+                slot: focusedCellInfo?.slot
+              });
             }
             return;
           }
@@ -651,12 +974,17 @@ function LaneManagement({ userData, onCheckoutBooking }) {
   };
 
   return (
-    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 text-left font-sans relative">
+    <div className="w-full max-w-[1600px] mx-auto rounded-[1.75rem] border border-slate-200 bg-white p-5 text-left font-sans shadow-sm relative sm:p-8">
       
       {/* เธชเนเธงเธเธซเธฑเธงเธเธฒเธฃเธเธฑเธ”เธเธฒเธฃเนเธฅเธฐเธเธเธดเธ—เธดเธเธเนเธญเธเน€เธเนเธฒ */}
       <div className="border-b border-slate-200 pb-4 mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-slate-800">กระดานควบคุมผังเวลาและเลนซ้อมกอล์ฟ</h2>
+          <h2 className="text-2xl font-black text-slate-800">{publicView ? 'ตารางการใช้เลนซ้อม' : 'กระดานควบคุมผังเวลาและเลนซ้อมกอล์ฟ'}</h2>
+          {publicView && (
+            <p className="mt-1 text-xs font-bold text-slate-400">
+              ตรวจสอบสถานะเลนซ้อมได้ทันที หากต้องการจองเลนกรุณาเข้าสู่ระบบสมาชิก
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 p-2.5 rounded-2xl w-full md:w-auto">
           <label className="text-xs font-black text-indigo-700 uppercase tracking-wider pl-1">เลือกวันที่ตรวจสอบ :</label>
@@ -722,7 +1050,7 @@ function LaneManagement({ userData, onCheckoutBooking }) {
                       const cell = getCellStatus(laneNum, slot);
                       const isSelecting = currentLaneSlots.includes(slot); 
 
-                      let cellStyle = "bg-white hover:bg-slate-100 cursor-pointer text-transparent border border-slate-200";
+                      let cellStyle = `bg-white hover:bg-slate-100 ${publicView ? 'cursor-help' : 'cursor-pointer'} text-transparent border border-slate-200`;
                       let customBorders = ""; 
 
                       if (isSelecting) {
@@ -763,13 +1091,20 @@ function LaneManagement({ userData, onCheckoutBooking }) {
                           customBorders += " rounded-r-lg border-r-4 "; 
                         }
 
-                        cellStyle = `cursor-pointer ${customBorders}`;
+                        cellStyle = `${publicView ? 'cursor-help' : 'cursor-pointer'} ${customBorders}`;
                       }
 
                       return (
                         <td
                           key={slot}
-                          onClick={() => handleCellClick(laneNum, slot)}
+                          onClick={publicView ? () => handleCellClick(laneNum, slot) : undefined}
+                          onMouseDown={(event) => {
+                            if (publicView) return;
+                            event.preventDefault();
+                            handleCellMouseDown(laneNum, slot);
+                          }}
+                          onMouseEnter={() => handleCellMouseEnter(laneNum, slot)}
+                          onMouseUp={() => setDragSelection(null)}
                           className={`p-3 text-xs transition-all select-none ${cellStyle}`}
                         >
                           {isShopClosed ? (
@@ -797,7 +1132,7 @@ function LaneManagement({ userData, onCheckoutBooking }) {
       )}
 
       {/* เนเธ–เธเธเธธเนเธกเธฅเธญเธขเธชเธฃเธธเธเธขเธญเธ”เนเธญเธเธเธฑเธเธเธฒเธฃเน */}
-      {getTotalSelectedSlotsCount() > 0 && !isShopClosed && (
+      {getTotalSelectedSlotsCount() > 0 && !isShopClosed && !publicView && (
         <div className="mt-6 border border-emerald-200 rounded-xl p-5 bg-emerald-50 flex flex-col sm:flex-row items-center justify-between shadow-md gap-4 animate-slideUp">
           <div className="text-left">
             <div className="text-sm md:text-base font-bold text-slate-700">
@@ -816,10 +1151,7 @@ function LaneManagement({ userData, onCheckoutBooking }) {
             )}
             
             <button 
-              onClick={() => {
-                resetLaneActionForm('walk-in');
-                setIsWalkInModalOpen(true); 
-              }} 
+              onClick={openLaneActionForm} 
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-6 py-2.5 rounded-xl text-sm transition-all shadow"
             >
               ดำเนินการจอง
@@ -829,7 +1161,7 @@ function LaneManagement({ userData, onCheckoutBooking }) {
       )}
 
       {/* MODAL: เธเธญเธฃเนเธกเธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เธฅเธนเธเธเนเธฒ */}
-      {isWalkInModalOpen && !isShopClosed && (
+      {isWalkInModalOpen && !isShopClosed && !publicView && (
         <div className="fixed inset-0 bg-black/50 flex items-start sm:items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto">
           <div className="w-full max-w-md bg-white p-4 sm:p-6 rounded-3xl sm:rounded-[2rem] shadow-2xl border text-left">
             <h3 className="text-xl font-black text-slate-800 border-b pb-2 mb-4">
@@ -852,16 +1184,28 @@ function LaneManagement({ userData, onCheckoutBooking }) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setLaneActionMode('walk-in')}
+                    onClick={() => {
+                      if (isSelectedDateToday) {
+                        setLaneActionMode('walk-in');
+                      }
+                    }}
+                    disabled={!isSelectedDateToday}
                     className={`rounded-xl border px-3 py-2 text-xs font-black transition-all ${
                       isImmediateActivationMode
                         ? 'bg-emerald-100 border-emerald-400 text-emerald-800'
+                        : !isSelectedDateToday
+                          ? 'bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed'
                         : 'bg-white border-slate-200 text-slate-500'
                     }`}
                   >
                     เปิดเลนทันที
                   </button>
                 </div>
+                {!isSelectedDateToday && (
+                  <p className="mt-2 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-[11px] font-bold text-indigo-700">
+                    วันที่เลือกไม่ใช่วันที่ปัจจุบัน ระบบจะทำรายการเป็นการจองล่วงหน้าเท่านั้น
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <div>
@@ -944,7 +1288,7 @@ function LaneManagement({ userData, onCheckoutBooking }) {
       )}
 
       {/* Component เธขเนเธญเธขเธชเธณเธซเธฃเธฑเธเธ”เธนเนเธฅเธฐเนเธเนเนเธเธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เธเธฒเธฃเธเธญเธ */}
-      {walkInModalStep === 'clubs' && !isShopClosed && (
+      {walkInModalStep === 'clubs' && !isShopClosed && !publicView && (
         <div className="fixed inset-0 bg-black/50 flex items-start sm:items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto">
           <div className="w-full max-w-md bg-white p-4 sm:p-6 rounded-3xl sm:rounded-[2rem] shadow-2xl border text-left">
             <h3 className="text-xl font-black text-slate-800 border-b pb-2 mb-4">เลือกไม้กอล์ฟสำหรับเช่า</h3>
@@ -973,10 +1317,12 @@ function LaneManagement({ userData, onCheckoutBooking }) {
                             <div className="text-xs font-bold text-slate-400">{club.type || 'ไม่ระบุประเภทไม้'}</div>
                             <div className="mt-1 text-xs font-bold text-emerald-600">พร้อมใช้งาน {club.available} ชิ้น</div>
                           </div>
-                          <div className="text-right">
-                            <div className="text-xs font-bold text-slate-400">ราคา/ชิ้น</div>
-                            <div className="text-sm font-black text-slate-800">{club.price} บาท</div>
-                          </div>
+                          {club.price > 0 && (
+                            <div className="text-right">
+                              <div className="text-xs font-bold text-slate-400">ราคา/ชิ้น</div>
+                              <div className="text-sm font-black text-slate-800">{club.price} บาท</div>
+                            </div>
+                          )}
                         </div>
                         <div className="mt-3 flex items-center justify-end gap-2">
                           <button type="button" onClick={() => handleWalkInClubQtyChange(club, -1)} className="h-9 w-9 rounded-full border border-slate-300 bg-white text-lg font-black text-slate-600">-</button>
@@ -998,7 +1344,7 @@ function LaneManagement({ userData, onCheckoutBooking }) {
       )}
 
       <BookingDetailModal
-        isOpen={isDetailModalOpen}
+        isOpen={isDetailModalOpen && !publicView}
         onClose={() => setIsDetailModalOpen(false)}
         focusedCellInfo={focusedCellInfo}
         currentBooking={currentBooking}
@@ -1040,7 +1386,7 @@ function LaneManagement({ userData, onCheckoutBooking }) {
             isOpen: true,
             type: 'danger',
             title: 'ยืนยันการลบรายการจอง',
-            message: 'คุณต้องการลบรายการจองนี้ออกจากระบบอย่างถาวรใช่หรือไม่?',
+            message: 'คุณต้องการลบข้อมูลการจองนี้ทั้งรายการใช่หรือไม่? ระบบจะลบทุกเลนและทุกช่วงเวลาที่อยู่ในรายการจองเดียวกัน',
             onConfirm: async () => {
               try {
                 await deleteDoc(doc(db, "bookings", bookingId));
@@ -1049,7 +1395,7 @@ function LaneManagement({ userData, onCheckoutBooking }) {
                   isOpen: true,
                   type: 'info',
                   title: 'ลบข้อมูลสำเร็จ',
-                  message: 'ระบบทำการลบข้อมูลรายการจองนี้ออกจากระบบอย่างถาวรเรียบร้อยแล้ว',
+                  message: 'ระบบทำการลบข้อมูลการจองทั้งรายการเรียบร้อยแล้ว',
                   onConfirm: () => { setAlertPopup(prev => ({ ...prev, isOpen: false })); fetchData(); }
                 });
               } catch (err) {

@@ -8,6 +8,7 @@ function SystemSettings() {
   const [services, setServices] = useState([]);
   const [serviceSortBy, setServiceSortBy] = useState('newest');
   const [pointSettings, setPointSettings] = useState(null);
+  const [bookingPolicyHours, setBookingPolicyHours] = useState('2');
 
   const [isEditServiceOpen, setIsEditServiceOpen] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState(null);
@@ -54,6 +55,13 @@ function SystemSettings() {
       setPointSettings({ ...data, id: pointSnap.id });
       setTempEarn({ baht: data.Earning_Rate_Amount || '', points: data.Earning_Rate_Points || '' });
       setTempRedeem({ points: data.RDT_Rate_Points || '', baht: data.RDT_Rate_Discount || '' });
+    }
+
+    const bookingPolicyRef = doc(db, "system_settings", "booking_policy");
+    const bookingPolicySnap = await getDoc(bookingPolicyRef);
+    if (bookingPolicySnap.exists()) {
+      const hours = Number(bookingPolicySnap.data().Modify_Limit_Hours);
+      setBookingPolicyHours(Number.isFinite(hours) ? String(hours) : '2');
     }
   };
 
@@ -143,6 +151,33 @@ function SystemSettings() {
     });
   };
 
+  const saveBookingPolicy = async () => {
+    const hours = Number(bookingPolicyHours);
+    if (!Number.isFinite(hours) || hours < 0) {
+      setModal({
+        isOpen: true,
+        type: 'danger',
+        title: 'ข้อมูลไม่ถูกต้อง',
+        message: 'กรุณากรอกจำนวนชั่วโมงเป็นตัวเลข 0 ขึ้นไป',
+        onConfirm: () => setModal((prev) => ({ ...prev, isOpen: false }))
+      });
+      return;
+    }
+
+    await setDoc(doc(db, "system_settings", "booking_policy"), {
+      Modify_Limit_Hours: hours,
+      Updated_At: new Date()
+    }, { merge: true });
+
+    setModal({
+      isOpen: true,
+      type: 'info',
+      title: 'บันทึกสำเร็จ',
+      message: 'อัปเดตเวลาที่อนุญาตให้สมาชิกแก้ไขหรือยกเลิกการจองเรียบร้อยแล้ว',
+      onConfirm: () => setModal((prev) => ({ ...prev, isOpen: false }))
+    });
+  };
+
   const askToggleStatus = (id, currentStatus, label, type) => {
     setModal({
       isOpen: true,
@@ -184,6 +219,41 @@ function SystemSettings() {
       </div>
 
       <div className="space-y-6 sm:space-y-8">
+        <section className="rounded-3xl border border-slate-100 bg-slate-50 p-4 sm:p-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <h3 className="text-lg sm:text-xl font-black text-slate-800">ตั้งค่าเวลาแก้ไขหรือยกเลิกการจองของสมาชิก</h3>
+              <p className="text-xs font-bold text-slate-400 mt-1">
+                สมาชิกจะแก้ไขหรือยกเลิกการจองได้เฉพาะก่อนถึงเวลาเริ่มจองตามจำนวนชั่วโมงที่กำหนด
+              </p>
+            </div>
+            <div className="w-full lg:w-[360px] rounded-2xl border border-slate-100 bg-white p-4">
+              <label className={s.inputLabel}>จำนวนชั่วโมงก่อนถึงเวลาเริ่มจอง</label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={bookingPolicyHours}
+                  onChange={(e) => setBookingPolicyHours(e.target.value)}
+                  className={s.input + ' !py-2.5 text-sm'}
+                  placeholder="เช่น 2"
+                />
+                <button
+                  type="button"
+                  onClick={saveBookingPolicy}
+                  className={s.btnPrimary + ' !px-5 !py-2.5 text-sm whitespace-nowrap'}
+                >
+                  บันทึก
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] font-bold text-slate-400">
+                ค่าปัจจุบัน: {bookingPolicyHours || 0} ชั่วโมง
+              </p>
+            </div>
+          </div>
+        </section>
+
         <section className="rounded-3xl border border-slate-100 bg-slate-50 p-4 sm:p-6">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
             <div>
@@ -364,6 +434,8 @@ function SystemSettings() {
               <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-3 items-center">
                 <input
                   type="number"
+                  min="0"
+                  step="0.01"
                   placeholder="ยอดใช้จ่าย (บาท)"
                   value={tempEarn.baht}
                   onChange={(e) => setTempEarn({ ...tempEarn, baht: e.target.value })}
@@ -372,6 +444,8 @@ function SystemSettings() {
                 <span className="text-sm font-black text-slate-400 text-center">ได้รับ</span>
                 <input
                   type="number"
+                  min="0"
+                  step="0.01"
                   placeholder="แต้มที่ได้รับ"
                   value={tempEarn.points}
                   onChange={(e) => setTempEarn({ ...tempEarn, points: e.target.value })}
@@ -380,7 +454,7 @@ function SystemSettings() {
               </div>
 
               <div className="mt-5 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
-                <span className="text-xs font-black text-slate-400">
+                <span className="inline-flex w-full sm:w-auto items-center justify-center rounded-2xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm sm:text-base font-black text-orange-700 shadow-sm">
                   ปัจจุบัน: {pointSettings?.Earning_Rate_Amount || 0} บ. = {pointSettings?.Earning_Rate_Points || 0} แต้ม
                 </span>
                 <div className="flex flex-col sm:flex-row gap-2">
@@ -419,6 +493,8 @@ function SystemSettings() {
               <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-3 items-center">
                 <input
                   type="number"
+                  min="0"
+                  step="0.01"
                   placeholder="ใช้แต้ม"
                   value={tempRedeem.points}
                   onChange={(e) => setTempRedeem({ ...tempRedeem, points: e.target.value })}
@@ -427,6 +503,8 @@ function SystemSettings() {
                 <span className="text-sm font-black text-slate-400 text-center">แลกได้</span>
                 <input
                   type="number"
+                  min="0"
+                  step="0.01"
                   placeholder="ส่วนลด (บาท)"
                   value={tempRedeem.baht}
                   onChange={(e) => setTempRedeem({ ...tempRedeem, baht: e.target.value })}
@@ -435,7 +513,7 @@ function SystemSettings() {
               </div>
 
               <div className="mt-5 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
-                <span className="text-xs font-black text-slate-400">
+                <span className="inline-flex w-full sm:w-auto items-center justify-center rounded-2xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm sm:text-base font-black text-orange-700 shadow-sm">
                   ปัจจุบัน: {pointSettings?.RDT_Rate_Points || 0} แต้ม = {pointSettings?.RDT_Rate_Discount || 0} บ.
                 </span>
                 <div className="flex flex-col sm:flex-row gap-2">

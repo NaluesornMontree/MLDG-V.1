@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, onSnapshot, doc, deleteDoc, query, orderBy } from "firebase/firestore";
+import { collection, onSnapshot, doc, deleteDoc } from "firebase/firestore";
 import { theme } from '../styles/theme';
 import Popup from './Popup';
 
-function ReviewManagement() {
+function ReviewManagement({ publicView = false }) {
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [summaryStats, setSummaryStats] = useState({
@@ -25,16 +25,31 @@ function ReviewManagement() {
 
   const s = theme.admin;
 
-  useEffect(() => {
-    // ดึงข้อมูลคะแนนและความคิดเห็น เรียงลำดับจากล่าสุดลงไป
-    const reviewsRef = collection(db, "reviews");
-    const q = query(reviewsRef, orderBy("createdAt", "desc"));
+  const getReviewRating = (review) => Number(review.rating ?? review.Rating ?? 0);
+  const getReviewComment = (review) => review.comment || review.Comment || '';
+  const getReviewCustomerName = (review) => review.customerName || review.Customer_Name || 'ไม่ระบุชื่อ';
+  const getReviewDate = (review) => {
+    const value = review.createdAt || review.Review_Date || review.reviewDate;
+    if (!value) return null;
+    const date = value?.toDate ? value.toDate() : new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const reviewList = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+  useEffect(() => {
+    // ดึงข้อมูลคะแนนและความคิดเห็นแบบ realtime และเรียงลำดับจากล่าสุดลงไป
+    const reviewsRef = collection(db, "reviews");
+
+    const unsubscribe = onSnapshot(reviewsRef, (snapshot) => {
+      const reviewList = snapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+        .sort((a, b) => {
+          const aDate = getReviewDate(a);
+          const bDate = getReviewDate(b);
+          return (bDate?.getTime?.() || 0) - (aDate?.getTime?.() || 0);
+        });
       
       setReviews(reviewList);
       calculateStats(reviewList);
@@ -63,8 +78,9 @@ function ReviewManagement() {
     const distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
 
     reviewList.forEach(rev => {
-      const rating = Math.round(rev.rating) || 5;
-      sum += rev.rating;
+      const rawRating = getReviewRating(rev);
+      const rating = Math.round(rawRating) || 5;
+      sum += rawRating;
       if (distribution[rating] !== undefined) {
         distribution[rating] += 1;
       }
@@ -111,12 +127,18 @@ function ReviewManagement() {
   if (loading) return <div className="text-center py-10 font-bold text-slate-500">กำลังโหลดข้อมูลคะแนนและความคิดเห็น...</div>;
 
   return (
-    <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 text-left font-sans relative select-none">
+    <div className="w-full max-w-[1600px] mx-auto rounded-[1.75rem] border border-slate-200 bg-white p-5 text-left font-sans shadow-sm relative select-none sm:p-8">
       
       {/* ส่วนหัวแสดงชื่อโมดูล */}
       <div className="border-b border-slate-200 pb-4 mb-6">
-        <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">ระบบตรวจสอบคะแนนและความคิดเห็น</h2>
-        <p className="text-slate-400 text-xs mt-1">สรุปข้อมูลความพึงพอใจของลูกค้าเพื่อนำไปใช้วิเคราะห์คุณภาพบริการและกรองความคิดเห็นสแปม</p>
+        <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">
+          {publicView ? 'คะแนนและความคิดเห็นจากลูกค้า' : 'ระบบตรวจสอบคะแนนและความคิดเห็น'}
+        </h2>
+        <p className="text-slate-400 text-xs mt-1">
+          {publicView
+            ? 'ตรวจสอบคะแนนความพึงพอใจและความคิดเห็นจากผู้ใช้บริการก่อนตัดสินใจจองเลนซ้อม'
+            : 'สรุปข้อมูลความพึงพอใจของลูกค้าเพื่อนำไปใช้วิเคราะห์คุณภาพบริการและกรองความคิดเห็นสแปม'}
+        </p>
       </div>
 
       {/* แดชบอร์ดสรุปสถิติคะแนนเฉลี่ย */}
@@ -155,39 +177,41 @@ function ReviewManagement() {
               <th className="p-4 w-48">ข้อมูลลูกค้า</th>
               <th className="p-4 w-32">คะแนนที่ให้</th>
               <th className="p-4">ข้อเสนอแนะและความคิดเห็น</th>
-              <th className="p-4 text-right w-28">การจัดการ</th>
+              {!publicView && <th className="p-4 text-right w-28">การจัดการ</th>}
             </tr>
           </thead>
           <tbody className="text-slate-600 text-sm font-medium">
             {reviews.map((item) => (
               <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-all items-center">
                 <td className="p-4">
-                  <div className="font-bold text-slate-800 truncate max-w-[180px]">{item.customerName || "ไม่ระบุชื่อ"}</div>
+                  <div className="font-bold text-slate-800 truncate max-w-[180px]">{getReviewCustomerName(item)}</div>
                   <div className="text-slate-400 text-[11px] font-bold mt-0.5">
-                    {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : "ทั่วไป"}
+                    {getReviewDate(item) ? getReviewDate(item).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : "ทั่วไป"}
                   </div>
                 </td>
                 <td className="p-4">
                   <span className="inline-block px-3 py-1 bg-amber-50 border border-amber-200 text-amber-700 font-black text-xs rounded-lg">
-                    {item.rating || 0} / 5
+                    {getReviewRating(item)} / 5
                   </span>
                 </td>
                 <td className="p-4 whitespace-pre-line text-slate-700 leading-relaxed font-semibold">
-                  {item.comment ? item.comment : <span className="text-slate-400 italic font-normal">ลูกค้าไม่ได้เขียนระบุข้อความประกอบ</span>}
+                  {getReviewComment(item) ? getReviewComment(item) : <span className="text-slate-400 italic font-normal">ลูกค้าไม่ได้เขียนระบุข้อความประกอบ</span>}
                 </td>
-                <td className="p-4 text-right">
-                  <button 
-                    onClick={() => handleDeleteReview(item.id, item.customerName)} 
-                    className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-black rounded-lg hover:bg-red-100 border border-red-200 transition-colors"
-                  >
-                    ลบความคิดเห็น
-                  </button>
-                </td>
+                {!publicView && (
+                  <td className="p-4 text-right">
+                    <button 
+                      onClick={() => handleDeleteReview(item.id, getReviewCustomerName(item))} 
+                      className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-black rounded-lg hover:bg-red-100 border border-red-200 transition-colors"
+                    >
+                      ลบความคิดเห็น
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
             {reviews.length === 0 && (
               <tr>
-                <td colSpan="4" className="text-center py-12 text-slate-400 italic">ไม่มีข้อมูลคะแนนและความคิดเห็นภายในระบบขณะนี้</td>
+                <td colSpan={publicView ? 3 : 4} className="text-center py-12 text-slate-400 italic">ไม่มีข้อมูลคะแนนและความคิดเห็นภายในระบบขณะนี้</td>
               </tr>
             )}
           </tbody>

@@ -145,8 +145,16 @@ function Auth() {
   };
 
   return (
-    <div className={s.wrapper}>
-      <div className={s.card}>
+    <div
+      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-emerald-950 p-4 font-sans"
+      style={{
+        backgroundImage: "linear-gradient(135deg, rgba(2, 44, 34, 0.92), rgba(6, 78, 59, 0.62), rgba(15, 23, 42, 0.72)), url('/shop-hero.jpg')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center'
+      }}
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.16),transparent_34%),linear-gradient(to_bottom,rgba(2,44,34,0.15),rgba(2,44,34,0.55))]" />
+      <div className="relative w-full max-w-md rounded-3xl border border-white/20 bg-white/92 p-6 text-slate-800 shadow-2xl shadow-emerald-950/30 backdrop-blur-xl sm:p-10 sm:rounded-[2.5rem]">
         <div className={s.header}>
           <h2 className={s.title}>
             {mode === 'forgot' ? 'RESET PASSWORD' : mode === 'register' ? 'REGISTER' : 'LOGIN'}
@@ -244,7 +252,7 @@ function Auth() {
           <button 
             type="button" 
             onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
-            className="text-sm font-black text-emerald-600 hover:text-emerald-700 transition-colors"
+            className="rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-2.5 text-sm font-black text-emerald-700 transition-all hover:border-emerald-200 hover:bg-emerald-100"
           >
             {mode === 'login' ? 'สมัครสมาชิกใหม่' : 'กลับไปหน้าเข้าสู่ระบบ'}
           </button>
@@ -253,7 +261,7 @@ function Auth() {
             <button 
               type="button"
               onClick={() => setMode('forgot')} 
-              className="text-xs font-bold text-slate-400 hover:text-slate-600"
+              className="rounded-xl px-4 py-2 text-xs font-black text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-700"
             >
               ลืมรหัสผ่านใช่หรือไม่?
             </button>

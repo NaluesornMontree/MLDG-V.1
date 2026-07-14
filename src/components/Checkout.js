@@ -40,18 +40,22 @@ function Checkout({ userId }) {
 
   // 3. คำนวณยอดเงินโดยใช้ราคาจากฐานข้อมูล (Pricing State)
   const grossTotal = (ballCount * pricing.ballPrice) + (clubCount * pricing.clubPrice) + (isDamaged ? pricing.damageFee : 0);
-  const discount = Math.floor(pointsToUse / pricing.pointRate); 
+  const safePointsToUse = Math.min(
+    Math.floor(Math.max(0, Number(pointsToUse) || 0)),
+    Math.floor(Number(userPoints) || 0)
+  );
+  const discount = Math.floor(safePointsToUse / pricing.pointRate); 
   const netTotal = Math.max(0, grossTotal - discount);
   const earnedPoints = Math.floor(netTotal / pricing.pointRate);
 
   const handlePayment = async () => {
     try {
       await setDoc(doc(db, "users", userId), {
-        totalPoints: increment(earnedPoints - pointsToUse),
+        totalPoints: increment(earnedPoints - safePointsToUse),
         lastUpdate: serverTimestamp()
       }, { merge: true });
       alert(`ชำระเงินสำเร็จ!\nยอดสุทธิ: ฿${netTotal}\nได้รับแต้มใหม่: +${earnedPoints} แต้ม`);
-      setUserPoints(prev => prev + (earnedPoints - pointsToUse));
+      setUserPoints(prev => prev + (earnedPoints - safePointsToUse));
       setPointsToUse(0);
     } catch (err) { alert(err.message); }
   };
@@ -93,7 +97,7 @@ function Checkout({ userId }) {
           </div>
           <div className="text-right">
             <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">ใช้แต้ม (ทุก {pricing.pointRate} แต้ม = ฿1)</p>
-            <input type="number" max={userPoints} value={pointsToUse} onChange={(e)=>setPointsToUse(Number(e.target.value))} className={s.input} />
+            <input type="number" min="0" step="1" max={Math.floor(Number(userPoints) || 0)} value={safePointsToUse} onChange={(e)=>setPointsToUse(Math.floor(Math.max(0, Number(e.target.value) || 0)))} className={s.input} />
           </div>
         </div>
       </div>

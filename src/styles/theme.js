@@ -22,7 +22,7 @@ export const theme = {
     btnPay: "w-full bg-slate-900 text-white py-5 rounded-2xl font-black shadow-xl mt-4"
   },
   admin: {
-    card: "bg-white p-4 sm:p-6 lg:p-10 rounded-3xl lg:rounded-[3rem] shadow-xl border border-slate-100 mb-8 font-sans overflow-hidden",
+    card: "w-full max-w-[1600px] mx-auto rounded-[1.75rem] border border-slate-200 bg-white p-5 font-sans text-left shadow-sm sm:p-8 overflow-hidden",
     title: "text-xl sm:text-2xl font-black text-slate-800 mb-6 sm:mb-8 flex items-center gap-3 leading-tight",
     inputLabel: "text-xs sm:text-sm font-black uppercase tracking-widest mb-2 sm:mb-3 block ml-1",
     input: "w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-emerald-500 outline-none font-bold text-slate-700",

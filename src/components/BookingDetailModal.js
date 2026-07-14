@@ -4,6 +4,14 @@ import { db } from '../firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { SaveIcon } from './AppIcons';
 import Popup from './Popup';
+import {
+  getClubName,
+  getClubPrice,
+  getClubRepairQty,
+  getClubTotalQty,
+  getClubType,
+  sortGolfClubsLikeInventory
+} from '../utils/golfClubUtils';
 
 function BookingDetailModal({ 
   isOpen, 
@@ -50,12 +58,15 @@ function BookingDetailModal({
         
         clubSnap.forEach((doc) => {
           const data = doc.data();
-          if (data && data.Club_Name) {
+          if (data && getClubName(data)) {
             clubsMap[doc.id] = {
               id: doc.id,
-              name: data.Club_Name,
-              price: Number(data.price || 100),
-              totalQty: Number(data.Quantity_Total || 0),
+              name: getClubName(data),
+              type: getClubType(data),
+              price: getClubPrice(data),
+              totalQty: getClubTotalQty(data),
+              repairQty: getClubRepairQty(data),
+              isActive: data.Is_Active !== false,
               rentedByActiveOccupied: 0 
             };
           }
@@ -67,7 +78,7 @@ function BookingDetailModal({
           const q = query(
             bookingsRef,
             where("bookingDate", "==", targetDate),
-            where("status", "==", "occupied") 
+            where("status", "in", ["pending", "confirmed", "occupied"])
           );
           const bookingSnap = await getDocs(q);
 
@@ -86,25 +97,27 @@ function BookingDetailModal({
         }
 
         const finalClubsList = Object.values(clubsMap).map((club) => {
-          let netAvailable = club.totalQty;
+          let netAvailable = Math.max(0, club.totalQty - club.repairQty);
 
           if (currentBooking.status === 'occupied') {
             const selfItem = currentBooking.rentedClubs?.find(item => item.clubId === club.id);
             const selfQty = selfItem ? Number(selfItem.qty || 0) : 0;
-            netAvailable = Math.max(0, club.totalQty - club.rentedByActiveOccupied - selfQty);
+            netAvailable = Math.max(0, club.totalQty - club.repairQty - club.rentedByActiveOccupied - selfQty);
           } else {
-            netAvailable = club.totalQty;
+            netAvailable = Math.max(0, club.totalQty - club.repairQty - club.rentedByActiveOccupied);
           }
 
           return {
             id: club.id,
             name: club.name,
+            type: club.type,
             price: club.price,
-            available: netAvailable 
+            available: netAvailable,
+            isActive: club.isActive
           };
-        });
+        }).filter((club) => club.isActive);
 
-        setDbClubs(finalClubsList);
+        setDbClubs(sortGolfClubsLikeInventory(finalClubsList));
       } catch (error) {
         console.error("Error calculating smart stock:", error);
       }
@@ -254,7 +267,7 @@ function BookingDetailModal({
                     <div className="w-full bg-white p-3 rounded-xl font-bold text-sm shadow-sm">{editPhone || "ไม่มีเบอร์โทร"}</div>
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">จำนวนสมาชิก</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">จำนวนผู้เข้าใช้งาน</label>
                     <div className="w-full bg-white p-3 rounded-xl font-bold text-sm shadow-sm">{editGuests} ท่าน</div>
                   </div>
                   
@@ -280,9 +293,9 @@ function BookingDetailModal({
                     )}
                     
                     {editInstructor ? (
-                      <div className="bg-emerald-50 border border-emerald-300 p-2 rounded-xl text-xs font-bold text-emerald-800">ต้องการผู้สอนกอล์ฟ (Pro)</div>
+                      <div className="bg-emerald-50 border border-emerald-300 p-2 rounded-xl text-xs font-bold text-emerald-800">ต้องการผู้สอนพื้นฐานการเล่นกอล์ฟ</div>
                     ) : (
-                      <div className="bg-slate-100 border border-slate-300 p-2 rounded-xl text-xs font-bold text-slate-500">ไม่ต้องการผู้สอนกอล์ฟ</div>
+                      <div className="bg-slate-100 border border-slate-300 p-2 rounded-xl text-xs font-bold text-slate-500">ไม่ต้องการผู้สอนพื้นฐานการเล่นกอล์ฟ</div>
                     )}
                   </div>
                 </>
@@ -303,7 +316,7 @@ function BookingDetailModal({
                     <input type="tel" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} className="w-full bg-white p-3 rounded-xl font-bold text-sm border focus:outline-none focus:border-emerald-500" />
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">จำนวนสมาชิก (ท่าน)</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">จำนวนผู้เข้าใช้งาน (ท่าน)</label>
                     <input type="number" min="1" value={editGuests} onChange={(e) => setEditGuests(e.target.value)} className="w-full bg-white p-3 rounded-xl font-bold text-sm border focus:outline-none focus:border-emerald-500" />
                   </div>
                   
@@ -362,9 +375,9 @@ function BookingDetailModal({
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-slate-600 mb-1">ต้องการผู้สอนกอล์ฟ (Pro) หรือไม่?</p>
+                      <p className="text-xs font-bold text-slate-600 mb-1">ต้องการผู้สอนพื้นฐานการเล่นกอล์ฟหรือไม่?</p>
                       <div className="flex flex-col sm:flex-row gap-2">
-                        <button type="button" onClick={() => setEditInstructor(true)} className={`flex-1 py-2 text-xs font-black rounded-xl border transition-all ${editInstructor ? 'bg-emerald-100 border-emerald-400 text-emerald-800 shadow-sm' : 'bg-white text-slate-400'}`}>ต้องการ Pro</button>
+                        <button type="button" onClick={() => setEditInstructor(true)} className={`flex-1 py-2 text-xs font-black rounded-xl border transition-all ${editInstructor ? 'bg-emerald-100 border-emerald-400 text-emerald-800 shadow-sm' : 'bg-white text-slate-400'}`}>ต้องการ</button>
                         <button type="button" onClick={() => setEditInstructor(false)} className={`flex-1 py-2 text-xs font-black rounded-xl border transition-all ${!editInstructor ? 'bg-rose-100 border-rose-300 text-rose-800 shadow-sm' : 'bg-white text-slate-400'}`}>ไม่ต้องการ</button>
                       </div>
                     </div>
@@ -383,8 +396,8 @@ function BookingDetailModal({
           <div className="space-y-2 pt-2">
             {!isEditMode ? (
               <>
-                {focusedCellInfo.status === 'booked' && <button onClick={onCheckIn} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-black text-base shadow transition-all">ยืนยันเริ่มเข้าใช้งาน (Check-in)</button>}
-                {focusedCellInfo.status === 'occupied' && <button onClick={() => onClearToAvailable('checkout')} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-black text-base shadow transition-all">สิ้นสุดเวลาใช้งาน (Check-out)</button>}
+                {focusedCellInfo.status === 'booked' && <button onClick={onCheckIn} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-black text-base shadow transition-all">ยืนยันเริ่มเข้าใช้งาน</button>}
+                {focusedCellInfo.status === 'occupied' && <button onClick={() => onClearToAvailable('checkout')} className="w-full border border-slate-300 bg-slate-700 py-3 rounded-xl font-black text-base text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95">สิ้นสุดเวลาใช้งาน</button>}
                 {focusedCellInfo.status === 'maintenance' && <button onClick={() => onClearToAvailable('open')} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-black text-base shadow transition-all">เปิดหน้าเลนทำงานปกติ / คืนตารางว่าง</button>}
                 
                 {/* ปุ่มแก้ไขข้อมูลการจอง (เพิ่มเงื่อนไขไม่ให้แสดงปุ่มแก้ไขหากเช็คอินแล้ว) */}
@@ -401,7 +414,7 @@ function BookingDetailModal({
                 {focusedCellInfo.status !== 'maintenance' && currentBooking && (
                   <button 
                     onClick={() => onDeleteBooking(currentBooking.id)}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-xl font-black text-sm transition-all shadow active:scale-95"
+                    className="w-full border border-rose-200 bg-rose-50 py-2.5 rounded-xl font-black text-sm text-rose-700 transition-all shadow-sm hover:bg-rose-100 active:scale-95"
                   >
                     ลบข้อมูลการจองถาวร
                   </button>

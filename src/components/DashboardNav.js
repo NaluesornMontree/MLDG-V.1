@@ -1,6 +1,7 @@
 import React from 'react';
 
 const iconPaths = {
+  dashboard: 'M4 13h7V4H4v9Zm9 7h7V4h-7v16ZM4 20h7v-5H4v5Z',
   user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0',
   users: 'M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 3a5 5 0 0 1 5 5M3 19a5 5 0 0 1 10 0',
   lane: 'M4 19h16M6 16l3-12h6l3 12M8 10h8',

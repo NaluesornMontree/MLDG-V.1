@@ -12,12 +12,14 @@ import PaymentManager from './PaymentManager';
 import ReviewManagement from './ReviewManagement'; 
 import BookingHistoryManagement from './BookingHistoryManagement';
 import { NavIcon, ResponsiveNavButton } from './DashboardNav';
+import AccountProfileCard from './AccountProfileCard';
+import DashboardHome from './DashboardHome';
 
 function OwnerDashboard({ user, userData, handleLogout }) { 
   const rawRole = userData?.Role || userData?.role || '';
   const role = rawRole.trim().toLowerCase();
 
-  const [activeTab, setActiveTab] = useState('staff');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [checkoutBookingId, setCheckoutBookingId] = useState(null);
   const [profileForm, setProfileForm] = useState({ FullName: '', PhoneNumber: '' });
   const [updatingProfile, setUpdatingProfile] = useState(false);
@@ -57,6 +59,7 @@ function OwnerDashboard({ user, userData, handleLogout }) {
   };
 
   const navItems = [
+    { id: 'dashboard', label: 'แดชบอร์ดภาพรวม', icon: 'dashboard', title: 'Dashboard' },
     { id: 'profile', label: 'จัดการข้อมูลส่วนตัว', icon: 'user', title: 'My Account Profile' },
     { id: 'staff', label: 'จัดการบุคลากร', icon: 'users', title: 'PERSONNEL Management' },
     { id: 'customers', label: 'จัดการข้อมูลลูกค้า', icon: 'users', title: 'Customer Management' },
@@ -69,12 +72,10 @@ function OwnerDashboard({ user, userData, handleLogout }) {
     { id: 'reviews', label: 'ตรวจสอบคะแนนและความคิดเห็น', icon: 'star', title: 'Review Management' },
   ];
 
-  const activeTitle = navItems.find(item => item.id === activeTab)?.title || 'Dashboard';
-
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans">
       {/* --- SIDEBAR --- */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-emerald-950/95 text-white p-2 shadow-2xl border-t border-emerald-800/70 md:static md:w-72 md:bg-emerald-900 md:p-6 md:border-t-0 md:flex md:flex-col md:justify-between">
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-emerald-950/95 text-white p-2 shadow-2xl border-t border-emerald-800/70 md:sticky md:top-0 md:h-screen md:w-72 md:shrink-0 md:overflow-y-auto md:bg-emerald-900 md:p-6 md:border-t-0 md:flex md:flex-col md:justify-between">
         <div>
           <h2 className="hidden md:block text-xl font-black mb-4 tracking-tighter">MLG MANAGEMENT</h2>
           
@@ -137,20 +138,8 @@ function OwnerDashboard({ user, userData, handleLogout }) {
       </div>
 
       {/* --- MAIN CONTENT --- */}
-      <div className="flex-1 p-4 pb-28 md:p-10 md:pb-10 overflow-y-auto flex flex-col justify-start">
-        <header className="mb-6 md:mb-10 flex justify-between items-center gap-3 w-full [&>button:last-child]:hidden">
-          <h1 className="text-xl md:text-3xl font-black text-slate-800 uppercase leading-tight">
-            <span className="sr-only">{activeTitle}</span>
-            {activeTab === 'profile' ? 'My Account Profile' :
-             activeTab === 'staff' ? 'PERSONNEL Management' : 
-             activeTab === 'customers' ? 'Customer Management' : 
-             activeTab === 'lanes' ? 'Lane Management' :
-             activeTab === 'bookingHistory' ? 'Booking History' :
-             activeTab === 'payment' ? 'Payment Management' :
-             activeTab === 'closures' ? 'Shop Closure Management' :
-             activeTab === 'clubs' ? 'Club Management' : 
-             activeTab === 'settings' ? 'System Settings' : 'Review Management'}
-          </h1>
+      <div className="min-w-0 flex-1 p-4 pb-28 md:p-10 md:pb-10 overflow-y-auto flex flex-col justify-start">
+        <header className="mb-6 md:mb-10 flex justify-end items-center gap-3 w-full [&>button:last-child]:hidden">
           <button onClick={handleLogout} className="shrink-0 text-sm font-bold text-red-500 bg-red-50 px-3 md:px-4 py-2 rounded-xl hover:bg-red-100 transition-all shadow-sm flex items-center gap-2">
             <NavIcon name="logOut" className="w-4 h-4" />
             <span className="hidden sm:inline">ออกจากระบบ</span>
@@ -158,46 +147,28 @@ function OwnerDashboard({ user, userData, handleLogout }) {
           <button onClick={handleLogout} className="text-sm font-bold text-red-500 bg-red-50 px-4 py-2 rounded-xl hover:bg-red-100 transition-all shadow-sm">ออกจากระบบ</button>
         </header>
 
+        {activeTab === 'dashboard' && (
+          <DashboardHome
+            role="owner"
+            user={user}
+            userData={userData}
+            onNavigate={setActiveTab}
+          />
+        )}
+
         {/* หน้าโปรไฟล์ดีไซน์กึ่งกลางสมมาตรไร้อีโมจิ */}
         {activeTab === 'profile' && (
-          <div className="w-full max-w-4xl mx-auto my-auto bg-white rounded-[2rem] border border-slate-200/80 shadow-md overflow-hidden flex flex-col md:flex-row text-left animate-fadeIn">
-            <div className="md:w-1/3 bg-slate-50 p-5 sm:p-8 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-slate-200/60">
-              <div className="w-24 h-24 bg-emerald-50 text-emerald-800 rounded-full flex items-center justify-center text-2xl font-black mb-4 border border-emerald-100/70 shadow-inner">
-                {profileForm.FullName ? profileForm.FullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'US'}
-              </div>
-              <h3 className="text-lg font-black text-slate-800 truncate max-w-full">{profileForm.FullName || 'ผู้บริหารระบบ'}</h3>
-              <p className="text-xs text-slate-400 font-medium font-mono truncate max-w-full mt-0.5">{user?.email}</p>
-              <div className="mt-4">
-                <span className="inline-block bg-blue-600 text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">OWNER</span>
-              </div>
-            </div>
-            <div className="md:w-2/3 p-5 sm:p-8 flex flex-col justify-between">
-              <form onSubmit={handleUpdateProfile} className="space-y-5">
-                <div className="border-b border-slate-100 pb-3 mb-4">
-                  <h3 className="text-base font-black text-slate-800">ข้อมูลรายละเอียดบัญชี</h3>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">อีเมลประจำบัญชี (ไม่สามารถแก้ไขได้)</label>
-                  <input type="email" value={user?.email || ''} disabled className="w-full bg-slate-100 border p-3 rounded-xl text-sm font-semibold text-slate-400 font-mono cursor-not-allowed focus:outline-none" />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">ชื่อจริง - นามสกุล</label>
-                    <input type="text" value={profileForm.FullName} onChange={(e) => setProfileForm({ ...profileForm, FullName: e.target.value })} placeholder="กรอกชื่อและนามสกุลจริง" className="w-full bg-white border border-slate-200 p-3 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-emerald-500 transition-all shadow-2xs" required />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">เบอร์โทรศัพท์ติดต่อ (10 หลัก)</label>
-                    <input type="text" value={profileForm.PhoneNumber} maxLength={10} onChange={(e) => setProfileForm({ ...profileForm, PhoneNumber: e.target.value.replace(/\D/g, '') })} placeholder="กรอกเบอร์โทรศัพท์" className="w-full bg-white border border-slate-200 p-3 rounded-xl text-sm font-bold text-slate-700 font-mono focus:outline-none focus:border-emerald-500 transition-all shadow-2xs" required />
-                  </div>
-                </div>
-                <div className="pt-4 border-t border-slate-100 flex justify-end">
-                  <button type="submit" disabled={updatingProfile} className="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2.5 px-8 rounded-xl text-sm shadow transition-all active:scale-95 disabled:bg-slate-300">
-                    {updatingProfile ? 'กำลังบันทึกข้อมูล...' : 'บันทึกการเปลี่ยนแปลง'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
+          <AccountProfileCard
+            user={user}
+            profileForm={profileForm}
+            setProfileForm={setProfileForm}
+            updatingProfile={updatingProfile}
+            onSubmit={handleUpdateProfile}
+            roleLabel="OWNER"
+            roleClassName="bg-blue-600"
+            fallbackName="ผู้บริหารระบบ"
+            fallbackInitials="US"
+          />
         )}
 
         {activeTab === 'staff' && <StaffManagement />}
@@ -214,6 +185,8 @@ function OwnerDashboard({ user, userData, handleLogout }) {
         {activeTab === 'bookingHistory' && <BookingHistoryManagement />}
         {activeTab === 'payment' && (
           <PaymentManager
+            user={user}
+            userData={userData}
             initialBookingId={checkoutBookingId}
             onInitialBookingHandled={() => setCheckoutBookingId(null)}
           />

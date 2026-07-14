@@ -4,9 +4,10 @@ import { db } from '../firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, query, where } from "firebase/firestore";
 import { theme } from '../styles/theme';
 import Popup from './Popup';
+import { getClubType, normalizeClubTypeDisplay, sortGolfClubsLikeInventory } from '../utils/golfClubUtils';
 
 function ClubManagement() {
-  const clubTypeOptions = ['Driver', 'Wood', 'Iron', 'Wedge', 'Putter', 'Other'];
+  const clubTypeOptions = ['Driver', 'Iron', 'Putter', 'Wedge', 'Wood', 'อื่น ๆ'];
   // เพิ่ม State เลือกวันที่สำหรับดูสถานะคลัง (เริ่มต้นที่วันที่ปัจจุบัน)
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = new Date();
@@ -17,6 +18,7 @@ function ClubManagement() {
 
   const [clubs, setClubs] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newClub, setNewClub] = useState({ Club_Name: '', Club_Type: '', Quantity_Total: 0, Repair_Club_Total: 0 });
@@ -150,18 +152,26 @@ function ClubManagement() {
     fetchClubsAndCalculateAvail();
   };
 
-  const clubTypeOrder = ['driver', 'wood', 'iron', 'wedge', 'putter'];
+  const getClubTypeLabel = (club) => getClubType(club);
 
-  const getClubTypeLabel = (club) => club.Club_Type || club.clubType || '';
-
-  const normalizeClubField = (value) => (value || '').trim().toLowerCase();
+  const normalizeClubField = (value) => {
+    const normalized = normalizeClubTypeDisplay(value || '').trim().toLowerCase();
+    return normalized === 'อื่นๆ' ? 'อื่น ๆ' : normalized;
+  };
 
   const getClubTypeSelectOptions = (currentValue = '') => {
-    const normalized = currentValue.trim();
+    const normalized = normalizeClubTypeDisplay(currentValue).trim();
     return normalized && !clubTypeOptions.includes(normalized)
-      ? [...clubTypeOptions.slice(0, -1), normalized, 'Other']
+      ? [...clubTypeOptions.slice(0, -1), normalized, 'อื่น ๆ']
       : clubTypeOptions;
   };
+
+  const clubTypeFilterOptions = [
+    ...new Set([
+      ...clubTypeOptions,
+      ...clubs.map(club => getClubTypeLabel(club)).filter(Boolean).map(normalizeClubTypeDisplay)
+    ])
+  ];
 
   const getClubTypeIcon = (club) => {
     const lowerType = getClubTypeLabel(club).toLowerCase();
@@ -181,35 +191,14 @@ function ClubManagement() {
     return 'M5 18l8-8m0 0 6-6m-6 6 4 4';
   };
 
-  const getClubTypeRank = (club) => {
-    const clubType = getClubTypeLabel(club);
-    const lowerName = `${clubType} ${club.Club_Name || ''}`.toLowerCase();
-    const rank = clubTypeOrder.findIndex(type => lowerName.includes(type));
-    return rank === -1 ? clubTypeOrder.length : rank;
-  };
+  const filteredClubs = clubs.filter(c => {
+    const clubType = getClubTypeLabel(c);
+    const matchesSearch = `${c.Club_Name || ''} ${clubType}`.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesType = typeFilter === 'all' || normalizeClubField(clubType) === normalizeClubField(typeFilter);
+    return matchesSearch && matchesType;
+  });
 
-  const filteredClubs = clubs.filter(c => 
-    `${c.Club_Name || ''} ${getClubTypeLabel(c)}`.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const sortedClubs = filteredClubs
-    .map((club, index) => ({ club, index }))
-    .sort((a, b) => {
-      const rankDiff = getClubTypeRank(a.club) - getClubTypeRank(b.club);
-      if (rankDiff !== 0) return rankDiff;
-
-      const typeDiff = getClubTypeLabel(a.club).localeCompare(getClubTypeLabel(b.club), ['en', 'th'], {
-        sensitivity: 'base'
-      });
-      if (typeDiff !== 0) return typeDiff;
-
-      const nameDiff = (a.club.Club_Name || '').localeCompare(b.club.Club_Name || '', ['en', 'th'], {
-        numeric: true,
-        sensitivity: 'base'
-      });
-      return nameDiff || a.index - b.index;
-    })
-    .map(({ club }) => club);
+  const sortedClubs = sortGolfClubsLikeInventory(filteredClubs);
 
   return (
     <div className={s.card}>
@@ -241,14 +230,34 @@ function ClubManagement() {
         </div>
       </div>
 
-      <div className={s.searchWrapper}>
-        <span className={s.searchIcon}></span>
-        <input 
-          placeholder="ค้นหาชื่อไม้กอล์ฟ..." 
-          className={s.searchInput}
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+      <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="text-left">
+          <label className="mb-1 ml-1 block text-xs font-black text-slate-500">
+            ค้นหาไม้กอล์ฟ
+          </label>
+          <input
+            placeholder="ค้นหาชื่อไม้กอล์ฟ..."
+            className="h-14 w-full rounded-2xl border-2 border-slate-100 bg-white px-5 text-sm font-bold text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-emerald-500"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        <div className="text-left">
+          <label className="mb-1 ml-1 block text-xs font-black text-slate-500">
+            แยกตามประเภทไม้
+          </label>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="h-14 w-full rounded-2xl border-2 border-slate-100 bg-white px-5 text-sm font-bold text-slate-700 outline-none transition-all focus:border-emerald-500"
+          >
+            <option value="all">ทุกประเภทไม้</option>
+            {clubTypeFilterOptions.map((type) => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="space-y-4">
@@ -308,7 +317,7 @@ function ClubManagement() {
             </div>
           </div>
         ))}
-        {filteredClubs.length === 0 && <p className="text-slate-400 font-bold italic py-4">ไม่พบข้อมูลรายการไม้กอล์ฟที่ค้นหา</p>}
+        {filteredClubs.length === 0 && <p className="text-slate-400 font-bold italic py-4">ไม่พบข้อมูลรายการไม้กอล์ฟที่ค้นหาหรือประเภทที่เลือก</p>}
       </div>
 
       {/* Popup สำหรับเพิ่มไม้ */}

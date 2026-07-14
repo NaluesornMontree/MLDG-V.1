@@ -1,12 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase'; 
-import { collection, query, where, onSnapshot, doc, updateDoc, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, orderBy, Timestamp, increment } from 'firebase/firestore';
 import Popup from './Popup'; 
 import LanePaymentModal from './LanePaymentModal';
 import OtherIncomeModal from './OtherIncomeModal';
 import { NavIcon } from './DashboardNav';
 
-function PaymentManager({ initialBookingId = null, onInitialBookingHandled = null }) {
+const getCheckoutTarget = (value) => (
+  typeof value === 'object' && value !== null
+    ? value
+    : { bookingId: value }
+);
+
+function PaymentManager({ user = null, userData = null, initialBookingId = null, onInitialBookingHandled = null }) {
   const [activeLanes, setActiveLanes] = useState([]);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +59,18 @@ function PaymentManager({ initialBookingId = null, onInitialBookingHandled = nul
     typeof (selectedPayment?.Needs_Club_Rent ?? selectedPayment?.needsClubRent) === 'boolean'
       ? Boolean(selectedPayment?.Needs_Club_Rent ?? selectedPayment?.needsClubRent)
       : Array.isArray(selectedPayment?.Rented_Clubs) && selectedPayment.Rented_Clubs.length > 0;
+  const cashierInfo = {
+    id: user?.uid || '',
+    name: userData?.FullName || userData?.fullName || user?.displayName || user?.email || 'ไม่ระบุชื่อผู้รับชำระ',
+    role: userData?.Role || userData?.role || 'staff',
+    email: user?.email || userData?.Email || userData?.email || ''
+  };
+  const getCashierLabel = (payment) => {
+    const name = payment?.Cashier_Name || payment?.cashierName || payment?.Processed_By_Name || '';
+    const role = payment?.Cashier_Role || payment?.cashierRole || payment?.Processed_By_Role || '';
+    if (!name && !role) return 'ไม่ระบุผู้รับชำระ';
+    return `${name || 'ไม่ระบุชื่อ'}${role ? ` (${String(role).toUpperCase()})` : ''}`;
+  };
   const getPaymentNote = (payment) => (
     payment?.Cancel_Reason ||
     payment?.cancelReason ||
@@ -70,6 +88,51 @@ function PaymentManager({ initialBookingId = null, onInitialBookingHandled = nul
     }
     return '-';
   };
+
+  const getLaneSortNumber = (value) => {
+    if (Array.isArray(value)) {
+      const laneNumbers = value
+        .map((lane) => Number(String(lane).match(/\d+/)?.[0]))
+        .filter(Number.isFinite);
+      return laneNumbers.length > 0 ? Math.min(...laneNumbers) : Number.MAX_SAFE_INTEGER;
+    }
+
+    const laneNumber = Number(String(value || '').match(/\d+/)?.[0]);
+    return Number.isFinite(laneNumber) ? laneNumber : Number.MAX_SAFE_INTEGER;
+  };
+
+  const getBookingLaneLabel = (booking) => (
+    booking.checkoutLaneNumber
+      ? `เลน ${booking.checkoutLaneNumber}`
+      :
+    booking.selectedLanes?.length
+      ? booking.selectedLanes.map((lane) => `เลน ${lane}`).join(', ')
+      : booking.Lane_Code || booking.laneNumber || booking.laneCode || 'ไม่ระบุเลน'
+  );
+
+  const getBookingLaneSortValue = (booking) => getLaneSortNumber(
+    booking.selectedLanes?.length ? booking.selectedLanes : (booking.Lane_Code || booking.laneNumber || booking.laneCode)
+  );
+
+  const getPaymentLaneSortValue = (payment) => getLaneSortNumber(
+    payment.Lane_Code || payment.laneCode || payment.laneNumber
+  );
+
+  const sortedActiveLanes = [...activeLanes].sort((a, b) => (
+    getBookingLaneSortValue(a) - getBookingLaneSortValue(b) ||
+    getBookingLaneLabel(a).localeCompare(getBookingLaneLabel(b), ['th', 'en'], { numeric: true, sensitivity: 'base' })
+  ));
+
+  const getPaymentSortTime = (payment) => {
+    const dateValue = payment.Payment_Date || payment.createdAt || payment.Updated_At;
+    const date = dateValue?.toDate ? dateValue.toDate() : new Date(dateValue || 0);
+    return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+  };
+
+  const sortedHistory = [...history].sort((a, b) => (
+    getPaymentSortTime(b) - getPaymentSortTime(a) ||
+    getPaymentLaneSortValue(a) - getPaymentLaneSortValue(b)
+  ));
 
   useEffect(() => {
     // 1. ดึงข้อมูลเลนที่กำลังใช้งานอยู่จริง
@@ -124,10 +187,15 @@ function PaymentManager({ initialBookingId = null, onInitialBookingHandled = nul
   useEffect(() => {
     if (!initialBookingId || activeLanes.length === 0) return;
 
-    const matchedBooking = activeLanes.find((booking) => booking.id === initialBookingId);
+    const target = getCheckoutTarget(initialBookingId);
+    const matchedBooking = activeLanes.find((booking) => booking.id === target.bookingId);
     if (!matchedBooking) return;
 
-    setSelectedBooking(matchedBooking);
+    setSelectedBooking({
+      ...matchedBooking,
+      checkoutLaneNumber: target.laneNumber || null,
+      checkoutSlot: target.slot || null
+    });
     setIsModalOpen(true);
     if (onInitialBookingHandled) {
       onInitialBookingHandled();
@@ -165,6 +233,15 @@ function PaymentManager({ initialBookingId = null, onInitialBookingHandled = nul
         cancelReason: reason,
         Cancelled_At: Timestamp.now()
       });
+
+      const paymentUserId = voidReasonTarget.User_ID || voidReasonTarget.userId || '';
+      const pointBalanceChange = Number(voidReasonTarget.Point_Balance_Change || 0);
+      if (paymentUserId && paymentUserId !== 'walk-in' && pointBalanceChange !== 0) {
+        await updateDoc(doc(db, 'users', paymentUserId), {
+          Points_Balance: increment(-pointBalanceChange)
+        });
+      }
+
       closeVoidReasonModal();
       setAlertPopup({
         isOpen: true,
@@ -185,8 +262,8 @@ function PaymentManager({ initialBookingId = null, onInitialBookingHandled = nul
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-2 sm:p-4 font-sans text-slate-800 relative select-none">
-      <div className="border-b pb-4 mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+    <div className="w-full max-w-[1600px] mx-auto rounded-[1.75rem] border border-slate-200 bg-white p-5 font-sans text-slate-800 shadow-sm relative select-none sm:p-8">
+      <div className="border-b border-slate-100 pb-4 mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
         <h1 className="text-xl sm:text-2xl font-black text-slate-800 leading-tight">ระบบจัดการและคิดเงินรายได้หน้าร้าน</h1>
         <button onClick={() => setIsOtherIncomeModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2.5 rounded-xl shadow text-sm transition-all w-full sm:w-auto">
           บันทึกรายได้อื่นๆ
@@ -197,16 +274,16 @@ function PaymentManager({ initialBookingId = null, onInitialBookingHandled = nul
       <div className="mb-8">
         <h3 className="font-bold text-gray-700 mb-4 text-sm text-left">เลนซ้อมที่เปิดบริการขณะนี้</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {activeLanes.length === 0 ? (
+          {sortedActiveLanes.length === 0 ? (
             <div className="col-span-full bg-slate-50 p-10 rounded-2xl text-center text-gray-400 font-bold border border-dashed">ไม่มีเลนสนามที่เปิดใช้งานอยู่ ณ ขณะนี้</div>
           ) : (
-            activeLanes.map((booking) => (
+            sortedActiveLanes.map((booking) => (
               <div key={booking.id} className="bg-white rounded-2xl shadow-sm p-4 border border-slate-200 flex flex-col items-center">
                 <div className="w-24 h-20 bg-slate-100 rounded-xl mb-2 border flex flex-col items-center justify-center p-2 text-center">
                   <p className="text-[10px] text-slate-400 font-bold uppercase">ชื่อลูกค้า</p>
                   <p className="text-xs text-emerald-700 font-black truncate max-w-full">{booking.customerName || 'ไม่ระบุชื่อ'}</p>
                 </div>
-                <span className="text-sm font-black mb-1">เลนซ้อม: {booking.selectedLanes?.map(l => `เลน ${l}`).join(', ')}</span>
+                <span className="text-sm font-black mb-1">เลนซ้อม: {getBookingLaneLabel(booking)}</span>
                 <button onClick={() => { setSelectedBooking(booking); setIsModalOpen(true); }} className="w-full mt-2 py-2 rounded-xl font-black bg-emerald-600 hover:bg-emerald-700 text-white text-sm shadow-sm transition-all">
                   เรียกคิดเงินชำระบิล
                 </button>
@@ -235,10 +312,10 @@ function PaymentManager({ initialBookingId = null, onInitialBookingHandled = nul
           </label>
         </div>
         <div className="md:hidden p-3 space-y-3">
-          {history.length === 0 ? (
+          {sortedHistory.length === 0 ? (
             <div className="text-center py-8 text-slate-400 text-sm font-bold">ยังไม่มีประวัติการชำระเงินในวันที่เลือก</div>
           ) : (
-            history.map((item) => (
+            sortedHistory.map((item) => (
               <div key={item.id} className={`rounded-2xl border p-4 space-y-3 ${item.status === 'cancelled' ? 'bg-slate-100 text-slate-400 opacity-75' : voidConfirmTargetId === item.id ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -305,14 +382,14 @@ function PaymentManager({ initialBookingId = null, onInitialBookingHandled = nul
               </tr>
             </thead>
             <tbody className="font-medium text-slate-600">
-              {history.length === 0 ? (
+              {sortedHistory.length === 0 ? (
                 <tr>
                   <td colSpan="8" className="py-10 text-center text-sm font-bold text-slate-400">
                     ยังไม่มีประวัติการชำระเงินในวันที่เลือก
                   </td>
                 </tr>
               ) : (
-                history.map((item) => (
+                sortedHistory.map((item) => (
                   <tr key={item.id} className={`border-b last:border-none hover:bg-slate-50 ${item.status === 'cancelled' ? 'bg-slate-100 text-slate-400 line-through opacity-75' : voidConfirmTargetId === item.id ? 'bg-amber-50' : ''}`}>
                     <td className="py-3 font-bold pl-2">{item.FullName || 'ไม่ระบุชื่อ'}</td>
                     <td className="text-xs font-bold text-slate-500">{item.Lane_Code || 'ไม่ระบุเลน'}</td>
@@ -351,23 +428,25 @@ function PaymentManager({ initialBookingId = null, onInitialBookingHandled = nul
         <LanePaymentModal 
           booking={selectedBooking} onClose={() => setIsModalOpen(false)} 
           rates={{ club: clubPriceRate, ball: ballPriceRate, penalty: penaltyPriceRate }} setAlert={setAlertPopup}
+          cashierInfo={cashierInfo}
         />
       )}
       {isOtherIncomeModalOpen && (
         <OtherIncomeModal 
           isOpen={isOtherIncomeModalOpen} onClose={() => setIsOtherIncomeModalOpen(false)} 
           clubInventory={clubInventory} setAlert={setAlertPopup}
+          cashierInfo={cashierInfo}
         />
       )}
       {selectedPayment && (
         <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
-          <div className="w-full max-w-3xl rounded-3xl bg-[#fcfcfb] border border-slate-200 shadow-2xl text-left overflow-hidden">
-            <div className="border-b border-slate-200 bg-white/95 px-4 py-3 sm:px-5 sm:py-4">
+          <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-[#fcfcfb] text-left shadow-2xl">
+            <div className="shrink-0 border-b border-slate-200 bg-white/95 px-5 py-4 sm:px-6">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-lg sm:text-xl font-black text-slate-800">ตรวจสอบรายการปิดยอดชำระเงิน</h3>
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black border ${
+                    <h3 className="text-lg sm:text-xl font-black text-slate-900">ตรวจสอบรายการปิดยอดชำระเงิน</h3>
+                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black border ${
                       selectedPayment.status === 'cancelled'
                         ? 'bg-rose-50 text-rose-600 border-rose-200'
                         : 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -387,49 +466,47 @@ function PaymentManager({ initialBookingId = null, onInitialBookingHandled = nul
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 p-3 sm:p-4 lg:grid-cols-[minmax(0,1.55fr)_250px]">
-              <div className="space-y-3">
-                <section className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="grid flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 sm:p-5 lg:grid-cols-[minmax(0,1.55fr)_280px]">
+              <div className="space-y-4">
+                <section className="rounded-3xl border border-slate-200 bg-white p-4 sm:p-5">
+                  <div className="mb-4 flex items-center justify-between gap-3">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">ข้อมูลรายการ</p>
                       <h4 className="mt-0.5 text-sm font-black text-slate-800">สรุปข้อมูลลูกค้าและการใช้บริการ</h4>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3">
                       <div className="text-[10px] font-black text-slate-400 mb-1">ชื่อลูกค้า</div>
                       <div className="text-sm font-black text-slate-800 break-words">{selectedPayment.FullName || 'ไม่ระบุชื่อ'}</div>
                     </div>
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-3">
                       <div className="text-[10px] font-black text-slate-400 mb-1">ตำแหน่งเลน</div>
                       <div className="text-sm font-black text-emerald-700">{selectedPayment.Lane_Code || 'ไม่ระบุเลน'}</div>
                     </div>
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3">
                       <div className="text-[10px] font-black text-slate-400 mb-1">ช่วงเวลาใช้งานเลน</div>
                       <div className="text-sm font-black text-slate-800 break-words">{getPaymentTimeLabel(selectedPayment)}</div>
                     </div>
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
-                      <div className="text-[10px] font-black text-slate-400 mb-1">วิธีชำระเงิน</div>
-                      <div className="text-sm font-black text-slate-800">{selectedPayment.Payment_Method || '-'}</div>
-                    </div>
-                    <div className={`rounded-xl border px-3 py-2.5 ${selectedPaymentNeedsInstructor ? 'border-indigo-200 bg-indigo-50' : 'border-slate-100 bg-slate-50'}`}>
-                      <div className="text-[10px] font-black text-slate-400 mb-1">ผู้สอนพื้นฐาน</div>
-                      <div className={`text-sm font-black ${selectedPaymentNeedsInstructor ? 'text-indigo-700' : 'text-slate-500'}`}>
-                        {selectedPaymentNeedsInstructor ? 'ต้องการ' : 'ไม่ต้องการ'}
+                    <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 xl:col-span-3">
+                      <div className={`rounded-2xl border px-4 py-3 ${selectedPaymentNeedsInstructor ? 'border-indigo-100 bg-indigo-50/70' : 'border-slate-100 bg-slate-50/80'}`}>
+                        <div className="text-[10px] font-black text-slate-400 mb-1">ผู้สอนพื้นฐานการเล่นกอล์ฟ</div>
+                        <div className={`text-sm font-black ${selectedPaymentNeedsInstructor ? 'text-indigo-700' : 'text-slate-500'}`}>
+                          {selectedPaymentNeedsInstructor ? 'ต้องการ' : 'ไม่ต้องการ'}
+                        </div>
                       </div>
-                    </div>
-                    <div className={`rounded-xl border px-3 py-2.5 ${selectedPaymentNeedsClubRent ? 'border-emerald-200 bg-emerald-50' : 'border-slate-100 bg-slate-50'}`}>
-                      <div className="text-[10px] font-black text-slate-400 mb-1">เช่าไม้กอล์ฟ</div>
-                      <div className={`text-sm font-black ${selectedPaymentNeedsClubRent ? 'text-emerald-700' : 'text-slate-500'}`}>
-                        {selectedPaymentNeedsClubRent ? 'ต้องการเช่า' : 'ไม่ต้องการเช่า'}
+                      <div className={`rounded-2xl border px-4 py-3 ${selectedPaymentNeedsClubRent ? 'border-emerald-100 bg-emerald-50/70' : 'border-slate-100 bg-slate-50/80'}`}>
+                        <div className="text-[10px] font-black text-slate-400 mb-1">เช่าไม้กอล์ฟ</div>
+                        <div className={`text-sm font-black ${selectedPaymentNeedsClubRent ? 'text-emerald-700' : 'text-slate-500'}`}>
+                          {selectedPaymentNeedsClubRent ? 'ต้องการเช่า' : 'ไม่ต้องการเช่า'}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
+                <section className="rounded-3xl border border-slate-200 bg-white p-4 sm:p-5">
                   <div className="mb-3">
                     <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Payment Items</p>
                     <h4 className="mt-0.5 text-sm font-black text-slate-800">รายการชำระเงิน</h4>
@@ -438,12 +515,12 @@ function PaymentManager({ initialBookingId = null, onInitialBookingHandled = nul
                   <div className="space-y-2">
                     {Array.isArray(selectedPayment.Items_List) && selectedPayment.Items_List.length > 0 ? (
                       selectedPayment.Items_List.map((item, index) => (
-                        <div key={`${item.item_name || 'item'}-${index}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                        <div key={`${item.item_name || 'item'}-${index}`} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3">
                           <div className="min-w-0">
                             <div className="text-sm font-black text-slate-800 break-words">{item.item_name || '-'}</div>
                             <div className="mt-0.5 text-[10px] font-bold text-slate-400">จำนวน {item.qty || 0} {item.unit || 'หน่วย'}</div>
                           </div>
-                          <div className="shrink-0 rounded-lg bg-white px-2.5 py-1.5 text-xs font-black text-slate-700 border border-slate-200">
+                          <div className="shrink-0 rounded-xl bg-white px-3 py-1.5 text-xs font-black text-slate-700 border border-slate-200">
                             {item.price || 0} บาท
                           </div>
                         </div>
@@ -457,16 +534,16 @@ function PaymentManager({ initialBookingId = null, onInitialBookingHandled = nul
                 </section>
 
                 {Array.isArray(selectedPayment.Rented_Clubs) && selectedPayment.Rented_Clubs.length > 0 && (
-                  <section className="rounded-2xl border border-emerald-100 bg-white p-3 sm:p-4">
+                  <section className="rounded-3xl border border-emerald-100 bg-white p-4 sm:p-5">
                     <div className="mb-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-500">Rental Clubs</p>
                       <h4 className="mt-0.5 text-sm font-black text-slate-800">รายการไม้กอล์ฟที่เช่า</h4>
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {selectedPayment.Rented_Clubs.map((club, index) => (
-                        <div key={`${club.Club_Name || 'club'}-${index}`} className="flex items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2">
+                        <div key={`${club.Club_Name || 'club'}-${index}`} className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3">
                           <div className="min-w-0 text-sm font-black text-emerald-800 break-words">{club.Club_Name || 'ไม่ระบุชื่อไม้กอล์ฟ'}</div>
-                          <div className="shrink-0 rounded-lg bg-white/90 px-2.5 py-1 text-xs font-black text-emerald-700 border border-emerald-200">
+                          <div className="shrink-0 rounded-xl bg-white/90 px-3 py-1 text-xs font-black text-emerald-700 border border-emerald-200">
                             {club.qty || 0} ชิ้น
                           </div>
                         </div>
@@ -476,7 +553,7 @@ function PaymentManager({ initialBookingId = null, onInitialBookingHandled = nul
                 )}
 
                 {getPaymentNote(selectedPayment) && (
-                  <section className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
+                  <section className="rounded-3xl border border-slate-200 bg-white p-4 sm:p-5">
                     <div className="mb-2.5">
                       <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Note</p>
                       <h4 className="mt-0.5 text-sm font-black text-slate-800">หมายเหตุเพิ่มเติม</h4>
@@ -489,33 +566,44 @@ function PaymentManager({ initialBookingId = null, onInitialBookingHandled = nul
               </div>
 
               <div className="space-y-3">
-                <aside className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4 lg:sticky lg:top-4">
+                <aside className="rounded-3xl border border-slate-200 bg-white p-4 sm:p-5 lg:sticky lg:top-4">
                   <div className="mb-3">
                     <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Summary</p>
                     <h4 className="mt-0.5 text-sm font-black text-slate-800">สรุปยอดชำระ</h4>
                   </div>
 
-                  <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3">
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between gap-3 text-xs font-bold text-slate-600">
+                  <div className="mb-3 grid grid-cols-1 gap-2">
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3">
+                      <div className="text-[10px] font-black text-slate-400 mb-1">วิธีชำระเงิน</div>
+                      <div className="text-sm font-black text-slate-800 break-words">{selectedPayment.Payment_Method || '-'}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3">
+                      <div className="text-[10px] font-black text-slate-400 mb-1">ผู้รับชำระเงิน</div>
+                      <div className="text-sm font-black text-slate-800 break-words">{getCashierLabel(selectedPayment)}</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl bg-slate-50/80 border border-slate-100 p-4">
+                    <div className="space-y-0 divide-y divide-slate-200/70">
+                      <div className="flex items-center justify-between gap-3 py-2 text-xs font-bold text-slate-600">
                         <span>ยอดเงินรวม</span>
                         <span className="text-slate-800">{selectedPayment.Total_Amount || 0} บาท</span>
                       </div>
-                      <div className="flex items-center justify-between gap-3 text-xs font-bold text-slate-600">
+                      <div className="flex items-center justify-between gap-3 py-2 text-xs font-bold text-slate-600">
                         <span>ส่วนลดแต้ม</span>
                         <span className="text-slate-800">{selectedPayment.Point_Discount || 0} บาท</span>
                       </div>
-                      <div className="flex items-center justify-between gap-3 text-xs font-bold text-slate-600">
+                      <div className="flex items-center justify-between gap-3 py-2 text-xs font-bold text-slate-600">
                         <span>เงินสด</span>
                         <span className="text-slate-800">{selectedPayment.Cash_Amount || 0} บาท</span>
                       </div>
-                      <div className="flex items-center justify-between gap-3 text-xs font-bold text-slate-600">
+                      <div className="flex items-center justify-between gap-3 py-2 text-xs font-bold text-slate-600">
                         <span>เงินโอน</span>
                         <span className="text-slate-800">{selectedPayment.Transfer_Amount || 0} บาท</span>
                       </div>
                     </div>
 
-                    <div className="mt-3 rounded-xl bg-white border border-emerald-100 px-3 py-3">
+                    <div className="mt-4 rounded-2xl bg-white border border-emerald-100 px-4 py-4">
                       <div className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-500 mb-1">Net Total</div>
                       <div className="text-xl font-black text-emerald-700">{selectedPayment.Net_Amount || 0} บาท</div>
                     </div>
@@ -524,7 +612,7 @@ function PaymentManager({ initialBookingId = null, onInitialBookingHandled = nul
               </div>
             </div>
 
-            <div className="border-t border-slate-200 bg-white px-4 py-3 sm:px-5 flex justify-end">
+            <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-3 sm:px-6 flex justify-end">
               <button
                 type="button"
                 onClick={() => setSelectedPayment(null)}

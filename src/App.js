@@ -1,16 +1,213 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './firebase'; 
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { onAuthStateChanged, sendEmailVerification, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore"; 
 import Auth from './components/Auth';
 import OwnerDashboard from './components/OwnerDashboard'; 
 import StaffDashboard from './components/StaffDashboard';
 import CustomerDashboard from './components/CustomerDashboard'; 
+import LaneManagement from './components/LaneManagement';
+import ReviewManagement from './components/ReviewManagement';
+
+function PublicPortal({ onLoginRequest }) {
+  const [activePublicTab, setActivePublicTab] = useState('lanes');
+  const [heroSlideIndex, setHeroSlideIndex] = useState(0);
+
+  const heroSlides = [
+    { src: '/shop-hero.jpg', alt: 'เมืองเลยไดร์ฟกอล์ฟ' },
+    { src: '/shop-gallery-1.jpg', alt: 'บรรยากาศร้านเมืองเลยไดร์ฟกอล์ฟ 1' },
+    { src: '/shop-gallery-2.jpg', alt: 'บรรยากาศร้านเมืองเลยไดร์ฟกอล์ฟ 2' },
+    { src: '/shop-gallery-3.jpg', alt: 'บรรยากาศร้านเมืองเลยไดร์ฟกอล์ฟ 3' }
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setHeroSlideIndex((current) => (current + 1) % heroSlides.length);
+    }, 5000);
+
+    return () => clearInterval(timer);
+  }, [heroSlides.length]);
+
+  const handleScrollToPublicInfo = (event) => {
+    event.preventDefault();
+    document.getElementById('public-info')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'
+    });
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
+      <header className="sticky top-0 z-40 border-b border-emerald-100 bg-white/95 shadow-sm backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-600">Muang Loei Drive Golf</p>
+            <h1 className="text-lg font-black text-slate-900 sm:text-xl">เมืองเลยไดร์ฟกอล์ฟ</h1>
+          </div>
+          <button
+            type="button"
+            onClick={onLoginRequest}
+            className="rounded-2xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition-all hover:bg-emerald-700 sm:px-5 sm:text-sm"
+          >
+            เข้าสู่ระบบ / สมัครสมาชิก
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-10">
+          <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-emerald-950 shadow-xl">
+            {heroSlides.map((slide, index) => (
+              <img
+                key={slide.src}
+                src={slide.src}
+                alt={slide.alt}
+                className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
+                  index === heroSlideIndex ? 'opacity-100' : 'opacity-0'
+                }`}
+                onError={(event) => {
+                  event.currentTarget.style.display = 'none';
+                  const fallback = event.currentTarget.parentElement?.querySelector('[data-shop-hero-fallback]');
+                  if (fallback) fallback.style.display = 'flex';
+                }}
+              />
+            ))}
+
+            <div className="relative h-[500px] sm:h-[800px]">
+              <div className="absolute inset-0 bg-gradient-to-b from-emerald-950/95 via-emerald-950/50 to-transparent" />
+              <div className="absolute inset-x-0 top-0 z-10 flex flex-col items-start px-5 pt-4 sm:px-8 sm:pt-6 lg:px-12 lg:pt-8">
+                <div className="order-2 mt-4 flex w-full flex-col gap-3 sm:mt-5">
+                  <div className="grid w-full max-w-3xl grid-cols-1 gap-3 sm:grid-cols-3">
+                    {[
+                      ['15', 'เลนซ้อม'],
+                      ['08:00-19:00', 'เวลาให้บริการ'],
+                      ['Online', 'จองล่วงหน้า']
+                    ].map(([value, label]) => (
+                      <div key={label} className="rounded-3xl border border-white/20 bg-white/15 p-4 shadow-sm backdrop-blur">
+                        <div className="text-lg font-black text-white sm:text-xl">{value}</div>
+                        <div className="mt-1 text-[11px] font-bold text-emerald-50/85">{label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={onLoginRequest}
+                      className="rounded-2xl border border-white/20 bg-white/15 px-6 py-3 text-sm font-black text-white shadow-sm backdrop-blur transition-all hover:bg-white/25"
+                    >
+                      จองเลนซ้อมออนไลน์
+                    </button>
+                    <a
+                      href="#public-info"
+                      onClick={handleScrollToPublicInfo}
+                      className="rounded-2xl border border-white/20 bg-white/15 px-6 py-3 text-center text-sm font-black text-white shadow-sm backdrop-blur transition-all hover:bg-white/25"
+                    >
+                      ตรวจสอบตารางเลน
+                    </a>
+                  </div>
+                </div>
+
+                <div className="order-1">
+                  <div className="mb-3 inline-flex w-fit rounded-2xl border border-white/20 bg-white/15 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-50 backdrop-blur">
+                    Driving Range & Golf Practice
+                  </div>
+                  <h2 className="max-w-4xl font-black leading-tight text-white drop-shadow-sm">
+                    <span className="block text-3xl sm:text-5xl lg:text-6xl">เมืองเลยไดร์ฟกอล์ฟ</span>
+                    <span className="mt-2 block text-xl sm:text-3xl lg:text-4xl">สนามสำหรับฝึกซ้อมกีฬากอล์ฟ</span>
+                    <span className="block text-xl sm:text-3xl lg:text-4xl">พร้อมระบบจองเลนซ้อมออนไลน์</span>
+                  </h2>
+                  <p className="mt-3 max-w-2xl text-sm font-bold leading-7 text-emerald-50/90 sm:text-base">
+                    ตรวจสอบสถานะเลนซ้อมได้ก่อนเดินทาง ดูคะแนนและความคิดเห็นจากลูกค้า และเข้าสู่ระบบสมาชิกเพื่อจองวันเวลาใช้งานได้สะดวกยิ่งขึ้น
+                  </p>
+                </div>
+              </div>
+
+              <div className="absolute bottom-4 right-5 z-10 flex gap-2 sm:bottom-6 sm:right-8">
+                {heroSlides.map((slide, index) => (
+                  <span
+                    key={slide.src}
+                    className={`h-2.5 rounded-full transition-all ${
+                      index === heroSlideIndex ? 'w-8 bg-white' : 'w-2.5 bg-white/45 hover:bg-white/75'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-7xl px-4 pb-6 sm:px-6">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            {[
+              ['ตรวจสอบเลนก่อนมาใช้บริการ', 'ดูสถานะเลนซ้อมแบบอัปเดตตามระบบ ช่วยวางแผนวันและเวลาฝึกซ้อมได้ง่ายขึ้น'],
+              ['จองออนไลน์สำหรับสมาชิก', 'สมาชิกสามารถเลือกวัน เวลา เลนซ้อม จำนวนผู้เข้าใช้ และบริการเสริมได้จากหน้าเว็บ'],
+              ['รีวิวและคะแนนจากลูกค้า', 'ตรวจสอบประสบการณ์จากผู้ใช้บริการจริงก่อนตัดสินใจเข้าใช้สนามซ้อม']
+            ].map(([title, description]) => (
+              <div key={title} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-700">
+                  <span className="h-3 w-3 rounded-full bg-emerald-600" />
+                </div>
+                <h3 className="text-base font-black text-slate-900">{title}</h3>
+                <p className="mt-2 text-sm font-bold leading-6 text-slate-500">{description}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-7xl px-4 pb-6 sm:px-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {[1, 2, 3].map((index) => (
+              <div key={index} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section id="public-info" className="mx-auto max-w-7xl px-4 pb-10 sm:px-6">
+          <div className="mb-5 grid grid-cols-1 gap-2 rounded-3xl border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setActivePublicTab('lanes')}
+              className={`rounded-2xl px-4 py-3 text-sm font-black transition-all ${
+                activePublicTab === 'lanes'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              ตารางการใช้เลนซ้อม
+            </button>
+            <button
+              type="button"
+              onClick={() => setActivePublicTab('reviews')}
+              className={`rounded-2xl px-4 py-3 text-sm font-black transition-all ${
+                activePublicTab === 'reviews'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              คะแนนและความคิดเห็น
+            </button>
+          </div>
+
+          {activePublicTab === 'lanes' ? (
+            <LaneManagement publicView onLoginRequest={onLoginRequest} />
+          ) : (
+            <ReviewManagement publicView />
+          )}
+        </section>
+      </main>
+    </div>
+  );
+}
 
 function App() {
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null); 
   const [loading, setLoading] = useState(true);
+  const [resendingVerification, setResendingVerification] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+  const [authTransitioning, setAuthTransitioning] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -41,30 +238,111 @@ function App() {
     signOut(auth).then(() => alert("ออกจากระบบเรียบร้อยแล้ว"));
   };
 
+  const handleOpenAuth = () => {
+    if (authTransitioning) return;
+
+    setAuthTransitioning(true);
+    window.setTimeout(() => {
+      setShowAuth(true);
+      setAuthTransitioning(false);
+      window.scrollTo({ top: 0, left: 0 });
+    }, 280);
+  };
+
+  const handleCloseAuth = () => {
+    if (authTransitioning) return;
+
+    setAuthTransitioning(true);
+    window.setTimeout(() => {
+      setShowAuth(false);
+      setAuthTransitioning(false);
+      window.scrollTo({ top: 0, left: 0 });
+    }, 240);
+  };
+
+  const handleResendVerification = async () => {
+    if (!auth.currentUser) return;
+
+    setResendingVerification(true);
+    try {
+      await sendEmailVerification(auth.currentUser);
+      alert("ส่งอีเมลยืนยันอีกครั้งแล้ว กรุณาตรวจสอบกล่องจดหมายหลักและกล่องจดหมายขยะ");
+    } catch (error) {
+      alert("ไม่สามารถส่งอีเมลยืนยันซ้ำได้: " + error.message);
+    } finally {
+      setResendingVerification(false);
+    }
+  };
+
+  const handleRefreshVerification = async () => {
+    if (!auth.currentUser) return;
+
+    await auth.currentUser.reload();
+    window.location.reload();
+  };
+
   if (loading) return (
     <div className="flex h-screen items-center justify-center bg-emerald-900 text-white font-bold animate-pulse">
-      MUANG LOEI GOLF IS LOADING...
+      MUANG LOEI DRIVE GOLF IS LOADING...
     </div>
   );
 
-  // กรณีที่ 1: ยังไม่ได้เข้าสู่ระบบ
-  if (!user) return <Auth />;
+  // กรณีที่ 1: ยังไม่ได้เข้าสู่ระบบ ให้ดูหน้าสาธารณะได้ก่อน
+  if (!user) {
+    if (showAuth) {
+      return (
+        <div className={`min-h-screen bg-slate-50 transition-all duration-300 ease-out motion-safe:animate-[screenEnter_0.35s_ease-out] ${authTransitioning ? 'translate-y-4 opacity-0' : 'translate-y-0 opacity-100'}`}>
+          <div className="fixed left-4 top-4 z-50 sm:left-6 sm:top-6">
+            <button
+              type="button"
+              onClick={handleCloseAuth}
+              className="rounded-2xl border border-white/25 bg-white/90 px-4 py-2.5 text-xs font-black text-emerald-900 shadow-lg shadow-emerald-950/10 backdrop-blur transition-all hover:bg-white sm:px-5"
+            >
+              กลับไปหน้าตรวจสอบสนาม
+            </button>
+          </div>
+          <Auth />
+        </div>
+      );
+    }
+
+    return (
+      <div className={`transition-all duration-300 ease-out motion-safe:animate-[screenEnter_0.35s_ease-out] ${authTransitioning ? '-translate-y-6 opacity-0' : 'translate-y-0 opacity-100'}`}>
+        <PublicPortal onLoginRequest={handleOpenAuth} />
+      </div>
+    );
+  }
 
   // กรณีที่ 2: เข้าสู่ระบบแล้ว แต่ยังไม่ได้ยืนยันอีเมล
   if (!user.emailVerified) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-slate-50 p-6">
-        <div className="bg-white p-10 rounded-[3rem] shadow-2xl text-center border-t-8 border-amber-500 w-96">
+        <div className="w-full max-w-sm rounded-[2rem] border-t-8 border-amber-500 bg-white p-6 text-center shadow-2xl sm:p-10 sm:rounded-[3rem]">
           <h2 className="text-xl font-black text-slate-800">กรุณายืนยันอีเมลของคุณ</h2>
           <p className="text-sm text-slate-500 my-4">
             ระบบได้ส่งลิงก์ยืนยันตัวตนไปที่อีเมลของท่านแล้ว กรุณาตรวจสอบในกล่องจดหมายหลัก หรือกล่องจดหมายขยะ จากนั้นกดยืนยันลิงก์ก่อนเข้าใช้งานระบบ
           </p>
-          <button 
-            onClick={handleLogout} 
-            className="bg-slate-800 text-white font-bold px-6 py-3 rounded-2xl hover:bg-red-500 transition-all text-sm w-full tracking-wider shadow-md"
-          >
-            กลับไปหน้าเข้าสู่ระบบ
-          </button>
+          <div className="space-y-3">
+            <button
+              onClick={handleResendVerification}
+              disabled={resendingVerification}
+              className="w-full rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-bold tracking-wider text-white shadow-md transition-all hover:bg-emerald-700 disabled:bg-slate-300"
+            >
+              {resendingVerification ? 'กำลังส่งอีเมล...' : 'ส่งอีเมลยืนยันอีกครั้ง'}
+            </button>
+            <button
+              onClick={handleRefreshVerification}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-bold text-slate-700 transition-all hover:bg-slate-50"
+            >
+              ฉันกดยืนยันแล้ว ตรวจสอบสถานะ
+            </button>
+            <button 
+              onClick={handleLogout} 
+              className="w-full rounded-2xl bg-slate-800 px-6 py-3 text-sm font-bold tracking-wider text-white shadow-md transition-all hover:bg-red-500"
+            >
+              กลับไปหน้าเข้าสู่ระบบ
+            </button>
+          </div>
         </div>
       </div>
     );
