@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { NavIcon } from './DashboardNav';
+import { toWholeNumber } from '../utils/numberUtils';
 
 const todayKey = () => new Date().toISOString().split('T')[0];
 
@@ -11,7 +12,26 @@ const toDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const getPaymentAmount = (payment) => Number(payment.Net_Amount || payment.netAmount || payment.Total_Amount || 0);
+const getNumericPaymentField = (payment, fieldNames = []) => {
+  for (const fieldName of fieldNames) {
+    const value = payment?.[fieldName];
+    if (value !== undefined && value !== null && value !== '') {
+      return toWholeNumber(value);
+    }
+  }
+  return null;
+};
+
+const getPaymentAmount = (payment) => {
+  const netAmount = getNumericPaymentField(payment, ['Net_Amount', 'netAmount']);
+  if (netAmount !== null) return netAmount;
+
+  const cashAmount = getNumericPaymentField(payment, ['Cash_Amount', 'cashAmount']) || 0;
+  const transferAmount = getNumericPaymentField(payment, ['Transfer_Amount', 'transferAmount']) || 0;
+  if (cashAmount + transferAmount > 0) return cashAmount + transferAmount;
+
+  return getNumericPaymentField(payment, ['Total_Amount', 'totalAmount']) || 0;
+};
 
 const MONTH_LABELS_TH = [
   'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
@@ -49,9 +69,7 @@ const buildRevenueReport = (payments = [], year = new Date().getFullYear()) => {
   };
 };
 
-const formatPoints = (value) => Number(value || 0).toLocaleString(undefined, {
-  maximumFractionDigits: 2
-});
+const formatPoints = (value) => toWholeNumber(value).toLocaleString();
 
 const getTimeValue = (date) => date?.getTime?.() || 0;
 
@@ -61,6 +79,14 @@ const getBookingCreatedDate = (booking) => (
 
 const getPaymentDate = (payment) => (
   toDate(payment.Payment_Date || payment.createdAt || payment.Created_At || payment.updatedAt)
+);
+
+const getReviewDate = (review) => (
+  toDate(review.createdAt || review.Review_Date || review.reviewDate || review.updatedAt)
+);
+
+const getReviewBookingId = (review) => (
+  review.bookingId || review.Booking_ID || review.BookingId || review.booking_id || ''
 );
 
 const getBookingStartDate = (booking) => {
@@ -302,7 +328,70 @@ function DashboardSummaryPanel({ selected, stats, sortMode, onSortModeChange }) 
         title: review.Customer_Name || review.customerName || 'ไม่ระบุชื่อลูกค้า',
         meta: review.Comment || review.comment || 'ไม่มีความคิดเห็นเพิ่มเติม',
         value: `${Number(review.Rating || review.rating || 0).toFixed(1)} คะแนน`,
-        tone: 'amber'
+        tone: 'amber',
+        createdAt: getReviewDate(review)
+      }))
+    },
+    memberPoints: {
+      title: 'ข้อมูลสรุปแต้มสะสม',
+      empty: 'ยังไม่มีข้อมูลแต้มสะสม',
+      rows: [{
+        title: 'แต้มสะสมปัจจุบัน',
+        meta: 'แต้มที่สามารถใช้แลกส่วนลดได้ตามเงื่อนไขของร้าน',
+        value: `${formatPoints(stats.pointsBalance)} PTS`,
+        tone: 'amber',
+        createdAt: new Date(),
+        details: [
+          `รายการจองทั้งหมด: ${stats.totalBookings} รายการ`,
+          `รีวิวและการให้คะแนน: ${stats.reviewCount} รายการ`
+        ]
+      }]
+    },
+    memberBookings: {
+      title: 'ข้อมูลสรุปรายการจองทั้งหมด',
+      empty: 'ยังไม่มีรายการจองในบัญชีนี้',
+      sortable: true,
+      allowUpcomingSort: true,
+      rows: stats.memberBookingList.map((booking) => ({
+        title: getBookingCustomer(booking),
+        meta: `${booking.bookingDate || '-'} | เลน ${getBookingLane(booking)} | ${getBookingTime(booking)}`,
+        value: getBookingStatusLabel(booking.status || 'booking'),
+        tone: booking.status === 'completed' ? 'emerald' : booking.status === 'pending' ? 'blue' : booking.status === 'cancelled' ? 'rose' : 'slate',
+        createdAt: getBookingCreatedDate(booking),
+        startAt: getBookingStartDate(booking),
+        details: getBookingDetails(booking)
+      }))
+    },
+    memberReviews: {
+      title: 'ข้อมูลสรุปรีวิวและการให้คะแนนของฉัน',
+      empty: 'ยังไม่มีรีวิวหรือคะแนนจากบัญชีนี้',
+      sortable: true,
+      rows: stats.memberReviewList.map((review) => ({
+        title: review.Booking_Date || review.bookingDate ? `วันที่ใช้บริการ ${review.Booking_Date || review.bookingDate}` : 'รีวิวการใช้บริการ',
+        meta: review.Comment || review.comment || 'ไม่มีความคิดเห็นเพิ่มเติม',
+        value: `${Number(review.Rating || review.rating || 0).toFixed(1)} คะแนน`,
+        tone: 'amber',
+        createdAt: getReviewDate(review),
+        details: [
+          review.Review_Status === 'voided_payment' || review.reviewStatus === 'voided_payment'
+            ? 'รายการนี้ถูกยกเลิกบิลและไม่นับรวมกับคะแนนร้าน'
+            : 'นับรวมตามสถานะรีวิวปัจจุบัน'
+        ]
+      }))
+    },
+    memberPendingReviews: {
+      title: 'รายการที่ยังไม่ได้ให้คะแนนและรีวิว',
+      empty: 'ไม่มีรายการที่รอให้คะแนนและรีวิว',
+      sortable: true,
+      allowUpcomingSort: true,
+      rows: stats.memberPendingReviewList.map((booking) => ({
+        title: getBookingCustomer(booking),
+        meta: `${booking.bookingDate || '-'} | เลน ${getBookingLane(booking)} | ${getBookingTime(booking)}`,
+        value: 'ยังไม่ได้รีวิว',
+        tone: 'amber',
+        createdAt: getBookingCreatedDate(booking),
+        startAt: getBookingStartDate(booking),
+        details: getBookingDetails(booking)
       }))
     }
   };
@@ -418,7 +507,9 @@ function OwnerRevenueOverview({ report }) {
                 />
               </div>
               <div className="text-[10px] font-black text-slate-500">{month.label}</div>
-              <div className="hidden text-[10px] font-bold text-slate-400 sm:block">{month.total ? `${Math.round(month.total / 1000).toLocaleString()}k` : '-'}</div>
+              <div className="text-[10px] font-bold leading-tight text-slate-500">
+                {month.total ? month.total.toLocaleString() : '-'}
+              </div>
             </div>
           );
         })}
@@ -443,6 +534,11 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
     pendingBookingList: [],
     paymentsTodayList: [],
     reviewsList: [],
+    memberBookingList: [],
+    memberReviewList: [],
+    memberPendingReviewList: [],
+    totalBookings: 0,
+    pointsBalance: 0,
     upcomingBookings: 0,
     completedBookings: 0,
     latestBooking: null,
@@ -465,7 +561,16 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
       setLoading(true);
       try {
         if (isCustomer && user?.uid) {
-          const bookings = await fetchCustomerBookings(user, userData);
+          const [bookings, reviewSnap] = await Promise.all([
+            fetchCustomerBookings(user, userData),
+            getDocs(query(collection(db, 'reviews'), where('User_ID', '==', user.uid))).catch(() => ({ docs: [] }))
+          ]);
+          const memberReviews = reviewSnap.docs.map((reviewDoc) => ({ id: reviewDoc.id, ...reviewDoc.data() }));
+          const reviewedBookingIds = new Set(memberReviews.map(getReviewBookingId).filter(Boolean));
+          const pendingReviewBookings = bookings.filter((booking) => (
+            booking.status === 'completed' && !reviewedBookingIds.has(booking.id)
+          ));
+          const pointsBalance = Number(userData?.Points_Balance ?? userData?.points_balance ?? 0);
           const now = new Date();
           const upcoming = bookings.filter((booking) => {
             const bookingDate = booking.bookingDate ? new Date(`${booking.bookingDate}T00:00:00`) : toDate(booking.createdAt);
@@ -483,12 +588,17 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
             pendingBookings: bookings.filter((booking) => booking.status === 'pending').length,
             revenueToday: 0,
             shopRating: 0,
-            reviewCount: 0,
-            bookingsTodayList: [],
-            activeLaneList: [],
-            pendingBookingList: [],
+            reviewCount: pendingReviewBookings.length,
+            bookingsTodayList: bookings.filter((booking) => booking.bookingDate === todayKey()),
+            activeLaneList: bookings.filter((booking) => booking.status === 'occupied'),
+            pendingBookingList: bookings.filter((booking) => booking.status === 'pending'),
             paymentsTodayList: [],
             reviewsList: [],
+            memberBookingList: bookings,
+            memberReviewList: memberReviews,
+            memberPendingReviewList: pendingReviewBookings,
+            totalBookings: bookings.length,
+            pointsBalance,
             upcomingBookings: upcoming.length,
             completedBookings: bookings.filter((booking) => booking.status === 'completed').length,
             latestBooking: latest,
@@ -533,6 +643,11 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
           pendingBookingList,
           paymentsTodayList,
           reviewsList: reviews,
+          memberBookingList: [],
+          memberReviewList: [],
+          memberPendingReviewList: [],
+          totalBookings: bookings.length,
+          pointsBalance: 0,
           upcomingBookings: 0,
           completedBookings: bookings.filter((booking) => booking.status === 'completed').length,
           latestBooking: null,
@@ -618,6 +733,41 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
     }
   ];
 
+  const memberCards = [
+    {
+      key: 'memberPoints',
+      label: 'แต้มสะสม',
+      value: formatPoints(stats.pointsBalance),
+      hint: 'กดเพื่อดูข้อมูลแต้มสะสม',
+      tone: 'amber',
+      icon: 'star'
+    },
+    {
+      key: 'memberBookings',
+      label: 'รายการจองทั้งหมด',
+      value: stats.totalBookings,
+      hint: 'กดเพื่อดูประวัติการจอง',
+      tone: 'emerald',
+      icon: 'booking'
+    },
+    {
+      key: 'pendingBookings',
+      label: 'รอตรวจสอบ',
+      value: stats.pendingBookings,
+      hint: 'รายการที่รอเจ้าหน้าที่ดูแล',
+      tone: 'blue',
+      icon: 'history'
+    },
+    {
+      key: 'memberPendingReviews',
+      label: 'รีวิวและการให้คะแนน',
+      value: stats.reviewCount,
+      hint: 'กดเพื่อดูคะแนนที่เคยให้',
+      tone: 'slate',
+      icon: 'star'
+    }
+  ];
+
   return (
     <div className="w-full max-w-[1600px] mx-auto rounded-[1.75rem] border border-slate-200 bg-white p-5 text-left shadow-sm animate-fadeIn sm:p-8">
       <div className="space-y-6">
@@ -646,13 +796,27 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
       ) : (
         <>
           <section className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${isOwner || isStaff ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
-            {isCustomer ? (
+            {isCustomer ? (false ? (
               <>
                 <StatCard label="แต้มสะสม" value={formatPoints(userData?.Points_Balance ?? userData?.points_balance ?? 0)} hint="คะแนนที่ใช้แลกส่วนลดได้" tone="amber" icon="star" />
                 <StatCard label="การจองที่กำลังมาถึง" value={stats.upcomingBookings} hint="รายการที่ยังใช้งานได้" tone="emerald" icon="booking" />
                 <StatCard label="รอตรวจสอบ" value={stats.pendingBookings} hint="รายการที่รอเจ้าหน้าที่ดูแล" tone="blue" icon="history" />
                 <StatCard label="ใช้บริการเสร็จสิ้น" value={stats.completedBookings} hint="ประวัติการใช้บริการทั้งหมด" tone="slate" icon="payment" />
               </>
+            ) : (
+              memberCards.map((card) => (
+                <StatCard
+                  key={card.key}
+                  label={card.label}
+                  value={card.value}
+                  hint={card.hint}
+                  tone={card.tone}
+                  icon={card.icon}
+                  active={selectedSummary === card.key}
+                  onClick={() => setSelectedSummary(card.key)}
+                />
+              ))
+            )
             ) : (
               managementCards.map((card) => (
                 <StatCard
@@ -680,7 +844,14 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
               {isOwner && <OwnerRevenueOverview report={stats.revenueReport} />}
             </>
           ) : (
-            <section>
+            <>
+            <DashboardSummaryPanel
+              selected={selectedSummary}
+              stats={stats}
+              sortMode={summarySortMode}
+              onSortModeChange={setSummarySortMode}
+            />
+            <section className="hidden">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h3 className="text-base font-black text-slate-800">เมนูลัดสำหรับวันนี้</h3>
               </div>
@@ -696,6 +867,7 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
                 ))}
               </div>
             </section>
+            </>
           )}
         </>
       )}

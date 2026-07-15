@@ -1,4 +1,4 @@
-const clubTypeOrder = ['driver', 'iron', 'putter', 'wedge', 'wood'];
+const clubTypeOrder = ['driver', 'hybrid', 'iron', 'putter', 'wedge', 'wood'];
 
 export const normalizeClubTypeDisplay = (value = '') => {
   const rawValue = value.toString().trim();

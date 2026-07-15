@@ -55,7 +55,7 @@ export const theme = {
     btnCancel: "bg-slate-100 text-slate-500 px-6 py-3 rounded-2xl font-black text-sm uppercase transition-all"
   },
   modal: {
-    overlay: "fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200",
+    overlay: "fixed inset-0 min-h-dvh bg-slate-900/60 backdrop-blur-sm z-[999] flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain animate-in fade-in duration-200",
     card: "bg-white w-full max-w-sm rounded-3xl sm:rounded-[3rem] p-5 sm:p-10 shadow-2xl border border-white/20 transform animate-in zoom-in-95 duration-200 max-h-[calc(100vh-1.5rem)] overflow-y-auto",
     iconWrapper: "w-20 h-20 mx-auto mb-6 rounded-3xl flex items-center justify-center text-3xl",
     title: "text-2xl font-black text-slate-800 text-center mb-2 tracking-tighter",

@@ -7,10 +7,12 @@ import {
   GoogleAuthProvider, 
   FacebookAuthProvider, // เพิ่มไลบรารีสำหรับ Facebook
   signInWithPopup,
-  sendEmailVerification
+  sendEmailVerification,
+  deleteUser
 } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { theme } from '../styles/theme'; 
+import { findUserByPhoneNumber, getDuplicatePhoneMessage, normalizePhoneNumber } from '../utils/userPhoneUtils';
 
 function Auth() {
   const [email, setEmail] = useState('');
@@ -42,7 +44,20 @@ function Auth() {
           }
         }
       } else if (mode === 'register') {
+        const normalizedPhone = normalizePhoneNumber(phoneNumber);
+        if (normalizedPhone.length !== 10) {
+          alert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
+          return;
+        }
+
         const userCred = await createUserWithEmailAndPassword(auth, email, password);
+
+        const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone, userCred.user.uid);
+        if (duplicatePhoneUser) {
+          await deleteUser(userCred.user);
+          alert(getDuplicatePhoneMessage(normalizedPhone));
+          return;
+        }
         
         await sendEmailVerification(userCred.user);
 
@@ -50,7 +65,7 @@ function Auth() {
           User_ID: userCred.user.uid,
           Email: email,
           FullName: fullName,
-          PhoneNumber: phoneNumber,
+          PhoneNumber: normalizedPhone,
           Role: 'customer', 
           Points_Balance: 0, 
           Is_Active: true,
@@ -154,12 +169,34 @@ function Auth() {
       }}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.16),transparent_34%),linear-gradient(to_bottom,rgba(2,44,34,0.15),rgba(2,44,34,0.55))]" />
-      <div className="relative w-full max-w-md rounded-3xl border border-white/20 bg-white/92 p-6 text-slate-800 shadow-2xl shadow-emerald-950/30 backdrop-blur-xl sm:p-10 sm:rounded-[2.5rem]">
+      <style>
+        {`
+          @keyframes authModeIn {
+            0% { opacity: 0; transform: translateY(14px) scale(0.985); filter: blur(5px); }
+            100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+          }
+          @keyframes authAccentIn {
+            0% { opacity: 0; transform: scaleX(0.55); }
+            100% { opacity: 1; transform: scaleX(1); }
+          }
+          .auth-mode-panel {
+            animation: authModeIn 280ms cubic-bezier(.22,1,.36,1);
+            transform-origin: center top;
+          }
+          .auth-mode-accent {
+            animation: authAccentIn 320ms cubic-bezier(.22,1,.36,1);
+            transform-origin: center;
+          }
+        `}
+      </style>
+      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/20 bg-white/92 p-6 text-slate-800 shadow-2xl shadow-emerald-950/30 backdrop-blur-xl transition-all duration-300 ease-out sm:p-10 sm:rounded-[2.5rem]">
+        <div key={mode} className="auth-mode-panel">
         <div className={s.header}>
           <h2 className={s.title}>
             {mode === 'forgot' ? 'RESET PASSWORD' : mode === 'register' ? 'REGISTER' : 'LOGIN'}
           </h2>
-          <p className="text-[10px] font-black text-slate-400 tracking-[0.2em] mt-2">
+          <div className="auth-mode-accent mx-auto mt-3 h-1 w-16 rounded-full bg-emerald-500/70" />
+          <p className="text-[10px] font-black text-slate-400 tracking-[0.2em] mt-3">
             MUANG LOEI GOLF MANAGEMENT
           </p>
         </div>
@@ -266,6 +303,7 @@ function Auth() {
               ลืมรหัสผ่านใช่หรือไม่?
             </button>
           )}
+        </div>
         </div>
       </div>
     </div>

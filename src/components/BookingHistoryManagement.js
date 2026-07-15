@@ -3,6 +3,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { theme } from '../styles/theme';
 import { NavIcon } from './DashboardNav';
+import { toWholeNumber } from '../utils/numberUtils';
 
 const STATUS_STYLES = {
   pending: 'bg-slate-100 text-slate-600 border-slate-200',
@@ -106,7 +107,7 @@ function escapeReceiptText(value) {
 }
 
 function formatReceiptMoney(value) {
-  return `${Number(value || 0).toLocaleString()} บาท`;
+  return `${toWholeNumber(value).toLocaleString()} บาท`;
 }
 
 function BookingHistoryManagement() {
@@ -676,16 +677,16 @@ function BookingHistoryManagement() {
                     <div className="mt-3 space-y-2 rounded-2xl border border-slate-100 bg-slate-50 p-3">
                       <div className="flex justify-between text-sm font-bold text-slate-600">
                         <span>ยอดรวม</span>
-                        <span>{Number(selectedBookingPayment.Total_Amount || 0).toLocaleString()} บาท</span>
+                        <span>{toWholeNumber(selectedBookingPayment.Total_Amount || 0).toLocaleString()} บาท</span>
                       </div>
                       <div className="flex justify-between text-sm font-bold text-slate-600">
                         <span>ส่วนลดจากแต้ม</span>
-                        <span>{Number(selectedBookingPayment.Point_Discount || 0).toLocaleString()} บาท</span>
+                        <span>{toWholeNumber(selectedBookingPayment.Point_Discount || 0).toLocaleString()} บาท</span>
                       </div>
                       <div className="grid grid-cols-1 gap-2">
                         <div className="rounded-xl bg-white px-3 py-2">
                           <div className="text-[10px] font-black text-slate-400">แต้มที่ได้รับ</div>
-                          <div className="text-sm font-black text-emerald-800">+{Number(selectedBookingPayment.Earned_Points || 0).toLocaleString()} PTS</div>
+                          <div className="text-sm font-black text-emerald-800">+{toWholeNumber(selectedBookingPayment.Earned_Points || 0).toLocaleString()} PTS</div>
                         </div>
                       </div>
                       <div className="flex justify-between text-sm font-bold text-slate-600">
@@ -694,7 +695,7 @@ function BookingHistoryManagement() {
                       </div>
                       <div className="flex items-center justify-between border-t border-slate-200 pt-3">
                         <span className="text-base font-black text-slate-800">ยอดสุทธิที่ชำระ</span>
-                        <span className="text-xl font-black text-emerald-700">{Number(selectedBookingPayment.Net_Amount || 0).toLocaleString()} บาท</span>
+                        <span className="text-xl font-black text-emerald-700">{toWholeNumber(selectedBookingPayment.Net_Amount || 0).toLocaleString()} บาท</span>
                       </div>
                     </div>
                   )}

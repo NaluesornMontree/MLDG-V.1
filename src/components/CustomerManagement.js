@@ -3,6 +3,8 @@ import { db } from '../firebase';
 import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { theme } from '../styles/theme';
 import Popup from './Popup';
+import { findUserByPhoneNumber, getDuplicatePhoneMessage, normalizePhoneNumber } from '../utils/userPhoneUtils';
+import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
 
 function CustomerManagement() {
   const [customers, setCustomers] = useState([]);
@@ -69,7 +71,20 @@ function CustomerManagement() {
   };
 
   const handleUpdate = async () => {
-    const pointsValue = Number(editForm.Points_Balance);
+    const pointsValue = toWholeNumber(editForm.Points_Balance);
+    const normalizedPhone = normalizePhoneNumber(editForm.PhoneNumber);
+
+    if (normalizedPhone.length !== 10) {
+      setAlertPopup({
+        isOpen: true,
+        type: 'warning',
+        title: 'ข้อมูลไม่ถูกต้อง',
+        message: 'กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก',
+        onConfirm: () => setAlertPopup((prev) => ({ ...prev, isOpen: false }))
+      });
+      return;
+    }
+
     if (!Number.isFinite(pointsValue) || pointsValue < 0) {
       setAlertPopup({
         isOpen: true,
@@ -82,10 +97,22 @@ function CustomerManagement() {
     }
 
     try {
+      const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone, editingCustomer);
+      if (duplicatePhoneUser) {
+        setAlertPopup({
+          isOpen: true,
+          type: 'warning',
+          title: 'พบเบอร์โทรศัพท์ซ้ำ',
+          message: getDuplicatePhoneMessage(normalizedPhone),
+          onConfirm: () => setAlertPopup((prev) => ({ ...prev, isOpen: false }))
+        });
+        return;
+      }
+
       const customerRef = doc(db, 'users', editingCustomer);
       await updateDoc(customerRef, {
         FullName: editForm.FullName,
-        PhoneNumber: editForm.PhoneNumber,
+        PhoneNumber: normalizedPhone,
         Points_Balance: pointsValue
       });
       setAlertPopup({
@@ -179,9 +206,7 @@ function CustomerManagement() {
 
   const normalizeText = (value) => value.toString().toLowerCase().trim();
   const normalizePhone = (value) => value.toString().replace(/\D/g, '');
-  const formatPoints = (value) => Number(value || 0).toLocaleString(undefined, {
-    maximumFractionDigits: 2
-  });
+  const formatPoints = (value) => toWholeNumber(value).toLocaleString();
 
   const getCustomerName = (customer) => (
     customer.FullName || customer.Email || customer.PhoneNumber || ''
@@ -354,13 +379,14 @@ function CustomerManagement() {
               <div>
                 <label className={s.inputLabel}>แต้มสะสม (Points Balance)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   min="0"
-                  step="0.01"
                   value={editForm.Points_Balance}
-                  onChange={(e) => setEditForm({ ...editForm, Points_Balance: e.target.value })}
+                  onChange={(e) => setEditForm({ ...editForm, Points_Balance: normalizeWholeNumberInput(e.target.value) })}
                   className={s.input}
-                  placeholder="0.00"
+                  placeholder="0"
                 />
               </div>
             </div>

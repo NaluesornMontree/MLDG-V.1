@@ -5,9 +5,10 @@ import { collection, getDocs, doc, updateDoc, addDoc, query, where } from "fireb
 import { theme } from '../styles/theme';
 import Popup from './Popup';
 import { getClubType, normalizeClubTypeDisplay, sortGolfClubsLikeInventory } from '../utils/golfClubUtils';
+import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
 
 function ClubManagement() {
-  const clubTypeOptions = ['Driver', 'Iron', 'Putter', 'Wedge', 'Wood', 'อื่น ๆ'];
+  const clubTypeOptions = ['Driver', 'Hybrid', 'Iron', 'Putter', 'Wedge', 'Wood', 'อื่น ๆ'];
   // เพิ่ม State เลือกวันที่สำหรับดูสถานะคลัง (เริ่มต้นที่วันที่ปัจจุบัน)
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = new Date();
@@ -89,8 +90,8 @@ function ClubManagement() {
     try {
       const clubName = newClub.Club_Name.trim();
       const clubType = newClub.Club_Type.trim();
-      const total = Number(newClub.Quantity_Total);
-      const repairTotal = Number(newClub.Repair_Club_Total || 0);
+      const total = toWholeNumber(newClub.Quantity_Total);
+      const repairTotal = toWholeNumber(newClub.Repair_Club_Total || 0);
 
       const existingClub = clubs.find((club) =>
         normalizeClubField(club.Club_Name) === normalizeClubField(clubName) &&
@@ -98,8 +99,8 @@ function ClubManagement() {
       );
 
       if (existingClub) {
-        const updatedTotal = Number(existingClub.Quantity_Total || 0) + total;
-        const updatedRepairTotal = Number(existingClub.Repair_Club_Total || 0) + repairTotal;
+        const updatedTotal = toWholeNumber(existingClub.Quantity_Total || 0) + total;
+        const updatedRepairTotal = toWholeNumber(existingClub.Repair_Club_Total || 0) + repairTotal;
 
         await updateDoc(doc(db, "golf_clubs", existingClub.id), {
           Club_Name: existingClub.Club_Name || clubName,
@@ -130,8 +131,8 @@ function ClubManagement() {
 
   const handleUpdateInfo = async () => {
     try {
-      const total = Number(editData.Quantity_Total);
-      const repairTotal = Number(editData.Repair_Club_Total || 0);
+      const total = toWholeNumber(editData.Quantity_Total);
+      const repairTotal = toWholeNumber(editData.Repair_Club_Total || 0);
       await updateDoc(doc(db, "golf_clubs", editingId), { 
         Club_Name: editData.Club_Name, 
         Club_Type: editData.Club_Type,
@@ -176,7 +177,7 @@ function ClubManagement() {
   const getClubTypeIcon = (club) => {
     const lowerType = getClubTypeLabel(club).toLowerCase();
 
-    if (lowerType.includes('driver') || lowerType.includes('wood')) {
+    if (lowerType.includes('driver') || lowerType.includes('hybrid') || lowerType.includes('wood')) {
       return 'M5 18l8-8m0 0 5-5 2 2-5 5m-2-2 4 4m-4-4L9 6l2-2 4 4';
     }
 
@@ -322,8 +323,8 @@ function ClubManagement() {
 
       {/* Popup สำหรับเพิ่มไม้ */}
       {isAddModalOpen && (
-        <div className={m.overlay}>
-          <div className={m.card + " !max-w-sm"}>
+        <div className={`${m.overlay} modal-overlay-transition`}>
+          <div className={`${m.card} !max-w-sm modal-card-transition`}>
             <h3 className={m.title}> เพิ่มไม้กอล์ฟ</h3>
             <div className="space-y-5 mb-8 text-left">
               <div>
@@ -351,19 +352,23 @@ function ClubManagement() {
               <div>
                 <label className={s.inputLabel}>จำนวนทั้งหมด (Quantity Total)</label>
                 <input 
-                  type="number" 
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={newClub.Quantity_Total} 
-                  onChange={(e) => setNewClub({...newClub, Quantity_Total: e.target.value})} 
+                  onChange={(e) => setNewClub({...newClub, Quantity_Total: normalizeWholeNumberInput(e.target.value)})} 
                   className={s.input + " text-center"} 
                 />
               </div>
               <div>
                 <label className={s.inputLabel}>จำนวนทั้งหมดที่ชำรุด (Repair Club Total)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   min="0"
                   value={newClub.Repair_Club_Total}
-                  onChange={(e) => setNewClub({...newClub, Repair_Club_Total: e.target.value})}
+                  onChange={(e) => setNewClub({...newClub, Repair_Club_Total: normalizeWholeNumberInput(e.target.value)})}
                   className={s.input + " text-center"}
                 />
               </div>
@@ -378,8 +383,8 @@ function ClubManagement() {
 
       {/* Popup สำหรับแก้ไขไม้ */}
       {isEditModalOpen && (
-        <div className={m.overlay}>
-          <div className={m.card + " !max-w-sm"}>
+        <div className={`${m.overlay} modal-overlay-transition`}>
+          <div className={`${m.card} !max-w-sm modal-card-transition`}>
             <h3 className={m.title}>แก้ไขข้อมูล</h3>
             <div className="space-y-5 mb-8 text-left">
               <div>
@@ -397,15 +402,17 @@ function ClubManagement() {
               </div>
               <div>
                 <label className={s.inputLabel}>จำนวนสต็อกทั้งหมด</label>
-                <input type="number" value={editData.Quantity_Total} onChange={(e) => setEditData({...editData, Quantity_Total: e.target.value})} className={s.input + " text-center"} />
+                <input type="text" inputMode="numeric" pattern="[0-9]*" value={editData.Quantity_Total} onChange={(e) => setEditData({...editData, Quantity_Total: normalizeWholeNumberInput(e.target.value)})} className={s.input + " text-center"} />
               </div>
               <div>
                 <label className={s.inputLabel}>จำนวนทั้งหมดที่ชำรุด</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   min="0"
                   value={editData.Repair_Club_Total}
-                  onChange={(e) => setEditData({...editData, Repair_Club_Total: e.target.value})}
+                  onChange={(e) => setEditData({...editData, Repair_Club_Total: normalizeWholeNumberInput(e.target.value)})}
                   className={s.input + " text-center"}
                 />
               </div>

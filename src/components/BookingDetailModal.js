@@ -12,6 +12,7 @@ import {
   getClubType,
   sortGolfClubsLikeInventory
 } from '../utils/golfClubUtils';
+import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
 
 function BookingDetailModal({ 
   isOpen, 
@@ -22,7 +23,9 @@ function BookingDetailModal({
   onClearToAvailable,
   onUpdateBooking,
   onDeleteBooking, 
-  isShopClosed
+  isShopClosed,
+  isCheckInAllowed = true,
+  checkInDisabledMessage = ''
 }) {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editName, setEditName] = useState('');
@@ -231,7 +234,7 @@ function BookingDetailModal({
     onUpdateBooking(currentBooking.id, {
       customerName: editName,
       customerPhone: editPhone,
-      guestCount: Number(editGuests),
+      guestCount: Math.max(1, toWholeNumber(editGuests)),
       needsClubRent: editClubRent,
       rentedClubs: finalClubsArray, 
       needsInstructor: editInstructor
@@ -317,7 +320,7 @@ function BookingDetailModal({
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-1">จำนวนผู้เข้าใช้งาน (ท่าน)</label>
-                    <input type="number" min="1" value={editGuests} onChange={(e) => setEditGuests(e.target.value)} className="w-full bg-white p-3 rounded-xl font-bold text-sm border focus:outline-none focus:border-emerald-500" />
+                    <input type="text" inputMode="numeric" pattern="[0-9]*" value={editGuests} onChange={(e) => setEditGuests(normalizeWholeNumberInput(e.target.value))} className="w-full bg-white p-3 rounded-xl font-bold text-sm border focus:outline-none focus:border-emerald-500" />
                   </div>
                   
                   <div className="space-y-2 pt-2 border-t border-slate-300">
@@ -396,7 +399,22 @@ function BookingDetailModal({
           <div className="space-y-2 pt-2">
             {!isEditMode ? (
               <>
-                {focusedCellInfo.status === 'booked' && <button onClick={onCheckIn} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-black text-base shadow transition-all">ยืนยันเริ่มเข้าใช้งาน</button>}
+                {focusedCellInfo.status === 'booked' && (
+                  <>
+                    <button
+                      onClick={onCheckIn}
+                      disabled={!isCheckInAllowed}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-black text-base shadow transition-all disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
+                    >
+                      ยืนยันเริ่มเข้าใช้งาน
+                    </button>
+                    {!isCheckInAllowed && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs font-bold leading-relaxed text-amber-700">
+                        {checkInDisabledMessage || 'ยังไม่ถึงวันที่ใช้งานจริง จึงยังไม่สามารถยืนยันเข้าใช้งานได้'}
+                      </div>
+                    )}
+                  </>
+                )}
                 {focusedCellInfo.status === 'occupied' && <button onClick={() => onClearToAvailable('checkout')} className="w-full border border-slate-300 bg-slate-700 py-3 rounded-xl font-black text-base text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95">สิ้นสุดเวลาใช้งาน</button>}
                 {focusedCellInfo.status === 'maintenance' && <button onClick={() => onClearToAvailable('open')} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-xl font-black text-base shadow transition-all">เปิดหน้าเลนทำงานปกติ / คืนตารางว่าง</button>}
                 

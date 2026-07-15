@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase'; 
-import { collection, query, where, onSnapshot, doc, updateDoc, orderBy, Timestamp, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, doc, updateDoc, orderBy, Timestamp, increment } from 'firebase/firestore';
 import Popup from './Popup'; 
 import LanePaymentModal from './LanePaymentModal';
 import OtherIncomeModal from './OtherIncomeModal';
 import { NavIcon } from './DashboardNav';
+import { toWholeNumber } from '../utils/numberUtils';
 
 const getCheckoutTarget = (value) => (
   typeof value === 'object' && value !== null
@@ -102,12 +103,13 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
   };
 
   const getBookingLaneLabel = (booking) => (
-    booking.checkoutLaneNumber
-      ? `เลน ${booking.checkoutLaneNumber}`
-      :
-    booking.selectedLanes?.length
-      ? booking.selectedLanes.map((lane) => `เลน ${lane}`).join(', ')
-      : booking.Lane_Code || booking.laneNumber || booking.laneCode || 'ไม่ระบุเลน'
+    Array.isArray(booking.checkoutLaneNumbers) && booking.checkoutLaneNumbers.length > 0
+      ? booking.checkoutLaneNumbers.map((lane) => `เลน ${lane}`).join(', ')
+      : booking.checkoutLaneNumber
+        ? `เลน ${booking.checkoutLaneNumber}`
+        : booking.selectedLanes?.length
+          ? booking.selectedLanes.map((lane) => `เลน ${lane}`).join(', ')
+          : booking.Lane_Code || booking.laneNumber || booking.laneCode || 'ไม่ระบุเลน'
   );
 
   const getBookingLaneSortValue = (booking) => getLaneSortNumber(
@@ -146,7 +148,7 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
       snapshot.docs.forEach((doc) => {
         const data = doc.data();
         const name = data.Service_Name || "";
-        const rate = Number(data.Price_Rate || 0);
+        const rate = toWholeNumber(data.Price_Rate || 0);
         if (name.includes("ไม้กอล์ฟ") || name.includes("Club")) setClubPriceRate(rate);
         else if (name.includes("ลูกกอล์ฟ") || name.includes("ถาด") || name.includes("Ball")) setBallPriceRate(rate);
         else if (name.includes("ค่าปรับ") || name.includes("เสียหาย") || name.includes("Penalty")) setPenaltyPriceRate(rate);
@@ -194,7 +196,12 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
     setSelectedBooking({
       ...matchedBooking,
       checkoutLaneNumber: target.laneNumber || null,
-      checkoutSlot: target.slot || null
+      checkoutLaneNumbers: Array.isArray(target.laneNumbers) ? target.laneNumbers : null,
+      checkoutSlot: target.slot || null,
+      checkoutSlots: Array.isArray(target.slots) ? target.slots : null,
+      checkoutEndTime: target.checkoutEndTime || null,
+      releaseAllSlotsForLane: Boolean(target.releaseAllSlotsForLane),
+      releaseAllSlotsForLanes: Boolean(target.releaseAllSlotsForLanes)
     });
     setIsModalOpen(true);
     if (onInitialBookingHandled) {
@@ -242,6 +249,32 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
         });
       }
 
+      const voidedBookingId = voidReasonTarget.Booking_ID || voidReasonTarget.bookingId || '';
+      if (voidedBookingId) {
+        const reviewQueries = [
+          query(collection(db, 'reviews'), where('Booking_ID', '==', voidedBookingId)),
+          query(collection(db, 'reviews'), where('bookingId', '==', voidedBookingId))
+        ];
+        const reviewSnapshots = await Promise.all(
+          reviewQueries.map((reviewQuery) => getDocs(reviewQuery).catch(() => ({ docs: [] })))
+        );
+        const reviewDocsById = new Map();
+        reviewSnapshots.forEach((snapshot) => {
+          snapshot.docs.forEach((reviewDoc) => reviewDocsById.set(reviewDoc.id, reviewDoc));
+        });
+
+        await Promise.all([...reviewDocsById.values()].map((reviewDoc) => updateDoc(doc(db, 'reviews', reviewDoc.id), {
+          Is_Active: false,
+          isActive: false,
+          Review_Status: 'voided_payment',
+          reviewStatus: 'voided_payment',
+          Hidden_Reason: 'payment_cancelled',
+          hiddenReason: 'payment_cancelled',
+          Voided_Payment_ID: voidReasonTarget.id,
+          Updated_At: Timestamp.now()
+        })));
+      }
+
       closeVoidReasonModal();
       setAlertPopup({
         isOpen: true,
@@ -266,7 +299,7 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
       <div className="border-b border-slate-100 pb-4 mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
         <h1 className="text-xl sm:text-2xl font-black text-slate-800 leading-tight">ระบบจัดการและคิดเงินรายได้หน้าร้าน</h1>
         <button onClick={() => setIsOtherIncomeModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2.5 rounded-xl shadow text-sm transition-all w-full sm:w-auto">
-          บันทึกรายได้อื่นๆ
+          เพิ่มข้อมูลรายได้ใหม่
         </button>
       </div>
 
@@ -330,15 +363,15 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
                 <div className="grid grid-cols-2 gap-2 text-xs font-bold">
                   <div className="bg-slate-50 rounded-xl p-2">
                     <span className="block text-slate-400">ยอดรวม</span>
-                    <span className="text-slate-700">{item.Total_Amount} บาท</span>
+                    <span className="text-slate-700">{toWholeNumber(item.Total_Amount).toLocaleString()} บาท</span>
                   </div>
                   <div className="bg-slate-50 rounded-xl p-2">
                     <span className="block text-slate-400">ยอดสุทธิ</span>
-                    <span className="text-emerald-700 font-black">{item.Net_Amount} บาท</span>
+                    <span className="text-emerald-700 font-black">{toWholeNumber(item.Net_Amount).toLocaleString()} บาท</span>
                   </div>
                   <div className="bg-slate-50 rounded-xl p-2">
                     <span className="block text-slate-400">ส่วนลดแต้ม</span>
-                    <span className="text-slate-700">{item.Point_Discount || 0} บาท</span>
+                    <span className="text-slate-700">{toWholeNumber(item.Point_Discount || 0).toLocaleString()} บาท</span>
                   </div>
                   <div className="bg-slate-50 rounded-xl p-2">
                     <span className="block text-slate-400">ชำระโดย</span>
@@ -393,9 +426,9 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
                   <tr key={item.id} className={`border-b last:border-none hover:bg-slate-50 ${item.status === 'cancelled' ? 'bg-slate-100 text-slate-400 line-through opacity-75' : voidConfirmTargetId === item.id ? 'bg-amber-50' : ''}`}>
                     <td className="py-3 font-bold pl-2">{item.FullName || 'ไม่ระบุชื่อ'}</td>
                     <td className="text-xs font-bold text-slate-500">{item.Lane_Code || 'ไม่ระบุเลน'}</td>
-                    <td>{item.Total_Amount} บาท</td>
-                    <td>{item.Point_Discount || 0} บาท</td>
-                    <td className={`font-black ${item.status === 'cancelled' ? 'text-slate-400' : 'text-emerald-700'}`}>{item.Net_Amount} บาท</td>
+                    <td>{toWholeNumber(item.Total_Amount).toLocaleString()} บาท</td>
+                    <td>{toWholeNumber(item.Point_Discount || 0).toLocaleString()} บาท</td>
+                    <td className={`font-black ${item.status === 'cancelled' ? 'text-slate-400' : 'text-emerald-700'}`}>{toWholeNumber(item.Net_Amount).toLocaleString()} บาท</td>
                     <td><span className="bg-white px-2 py-0.5 rounded-md text-xs font-bold border text-slate-500">{item.Payment_Method}</span></td>
                     
                     <td className="text-xs text-slate-500 max-w-[160px] truncate" title={getPaymentNote(item)}>
@@ -439,8 +472,8 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
         />
       )}
       {selectedPayment && (
-        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
-          <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-[#fcfcfb] text-left shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 p-3 backdrop-blur-sm modal-overlay-transition sm:items-center sm:p-4">
+          <div className="modal-card-transition flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-[#fcfcfb] text-left shadow-2xl">
             <div className="shrink-0 border-b border-slate-200 bg-white/95 px-5 py-4 sm:px-6">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -587,25 +620,25 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
                     <div className="space-y-0 divide-y divide-slate-200/70">
                       <div className="flex items-center justify-between gap-3 py-2 text-xs font-bold text-slate-600">
                         <span>ยอดเงินรวม</span>
-                        <span className="text-slate-800">{selectedPayment.Total_Amount || 0} บาท</span>
+                        <span className="text-slate-800">{toWholeNumber(selectedPayment.Total_Amount || 0).toLocaleString()} บาท</span>
                       </div>
                       <div className="flex items-center justify-between gap-3 py-2 text-xs font-bold text-slate-600">
                         <span>ส่วนลดแต้ม</span>
-                        <span className="text-slate-800">{selectedPayment.Point_Discount || 0} บาท</span>
+                        <span className="text-slate-800">{toWholeNumber(selectedPayment.Point_Discount || 0).toLocaleString()} บาท</span>
                       </div>
                       <div className="flex items-center justify-between gap-3 py-2 text-xs font-bold text-slate-600">
                         <span>เงินสด</span>
-                        <span className="text-slate-800">{selectedPayment.Cash_Amount || 0} บาท</span>
+                        <span className="text-slate-800">{toWholeNumber(selectedPayment.Cash_Amount || 0).toLocaleString()} บาท</span>
                       </div>
                       <div className="flex items-center justify-between gap-3 py-2 text-xs font-bold text-slate-600">
                         <span>เงินโอน</span>
-                        <span className="text-slate-800">{selectedPayment.Transfer_Amount || 0} บาท</span>
+                        <span className="text-slate-800">{toWholeNumber(selectedPayment.Transfer_Amount || 0).toLocaleString()} บาท</span>
                       </div>
                     </div>
 
                     <div className="mt-4 rounded-2xl bg-white border border-emerald-100 px-4 py-4">
                       <div className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-500 mb-1">Net Total</div>
-                      <div className="text-xl font-black text-emerald-700">{selectedPayment.Net_Amount || 0} บาท</div>
+                      <div className="text-xl font-black text-emerald-700">{toWholeNumber(selectedPayment.Net_Amount || 0).toLocaleString()} บาท</div>
                     </div>
                   </div>
                 </aside>
@@ -626,8 +659,8 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
       )}
 
       {voidReasonTarget && (
-        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
-          <div className="w-full max-w-md rounded-3xl border border-rose-100 bg-white shadow-2xl text-left overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 p-3 backdrop-blur-sm modal-overlay-transition sm:items-center sm:p-4">
+          <div className="modal-card-transition w-full max-w-md overflow-hidden rounded-3xl border border-rose-100 bg-white text-left shadow-2xl">
             <div className="border-b border-rose-100 bg-rose-50 px-4 py-4 sm:px-5">
               <h3 className="text-lg font-black text-rose-700">ยกเลิกรายการชำระเงิน</h3>
               <p className="mt-1 text-xs font-bold text-rose-500">
@@ -640,7 +673,7 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
                 <div className="text-[11px] font-black text-slate-400 mb-1">รายการที่ต้องการยกเลิก</div>
                 <div className="text-sm font-black text-slate-800">{voidReasonTarget.FullName || 'ไม่ระบุชื่อลูกค้า'}</div>
                 <div className="mt-1 text-xs font-bold text-slate-500">
-                  {voidReasonTarget.Lane_Code || 'ไม่ระบุเลน'} | ยอดสุทธิ {voidReasonTarget.Net_Amount || 0} บาท
+                  {voidReasonTarget.Lane_Code || 'ไม่ระบุเลน'} | ยอดสุทธิ {toWholeNumber(voidReasonTarget.Net_Amount || 0).toLocaleString()} บาท
                 </div>
               </div>
 

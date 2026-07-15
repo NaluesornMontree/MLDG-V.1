@@ -4,6 +4,7 @@ import { collection, getDocs, doc, updateDoc, setDoc } from "firebase/firestore"
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { theme } from '../styles/theme';
 import Popup from './Popup';
+import { findUserByPhoneNumber, getDuplicatePhoneMessage, normalizePhoneNumber } from '../utils/userPhoneUtils';
 
 function StaffManagement() {
   const [staffs, setStaffs] = useState([]);
@@ -47,6 +48,18 @@ function StaffManagement() {
     }
 
     try {
+      const normalizedPhone = normalizePhoneNumber(newStaff.PhoneNumber);
+      if (normalizedPhone.length !== 10) {
+        alert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
+        return;
+      }
+
+      const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone);
+      if (duplicatePhoneUser) {
+        alert(getDuplicatePhoneMessage(normalizedPhone));
+        return;
+      }
+
       const userCredential = await createUserWithEmailAndPassword(
         secondaryAuth, 
         newStaff.Email, 
@@ -58,7 +71,7 @@ function StaffManagement() {
         User_ID: user.uid,
         FullName: newStaff.FullName,
         Email: newStaff.Email,
-        PhoneNumber: newStaff.PhoneNumber,
+        PhoneNumber: normalizedPhone,
         Role: newStaff.Role, // บันทึก Role ตามที่เลือก
         Is_Active: true,
         CreatedAt: new Date()
@@ -82,11 +95,23 @@ function StaffManagement() {
     }
     
     try {
+      const normalizedPhone = normalizePhoneNumber(editData.PhoneNumber);
+      if (normalizedPhone.length !== 10) {
+        alert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
+        return;
+      }
+
+      const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone, editingId);
+      if (duplicatePhoneUser) {
+        alert(getDuplicatePhoneMessage(normalizedPhone));
+        return;
+      }
+
       const staffRef = doc(db, "users", editingId);
       await updateDoc(staffRef, { 
         FullName: editData.FullName,
         Email: editData.Email,
-        PhoneNumber: editData.PhoneNumber,
+        PhoneNumber: normalizedPhone,
         Role: editData.Role // อัปเดตบทบาทได้ด้วย
       });
       setIsEditModalOpen(false);
@@ -264,8 +289,8 @@ function StaffManagement() {
 
       {/* ฟอร์มแก้ไขข้อมูลสมาชิกในทีม */}
       {isEditModalOpen && (
-        <div className={m.overlay}>
-          <div className={m.card + " !max-w-lg"}>
+        <div className={`${m.overlay} modal-overlay-transition`}>
+          <div className={`${m.card} !max-w-lg modal-card-transition`}>
             <h3 className={m.title}>แก้ไขข้อมูลสมาชิกในทีม</h3>
             <div className="space-y-4 mb-8 text-left">
               <div>
@@ -307,8 +332,8 @@ function StaffManagement() {
 
       {/* ฟอร์มเพิ่มสมาชิกใหม่ */}
       {isAddModalOpen && (
-        <div className={m.overlay}>
-          <div className={m.card + " !max-w-lg"}>
+        <div className={`${m.overlay} modal-overlay-transition`}>
+          <div className={`${m.card} !max-w-lg modal-card-transition`}>
             <h3 className={m.title}>เพิ่มสมาชิกใหม่ในทีม</h3>
             <div className="space-y-4 mb-8 text-left">
               <div>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../firebase';
+import { toWholeNumber } from '../utils/numberUtils';
 
 function getInitials(name = '', fallback = 'US') {
   const initials = name
@@ -15,9 +16,7 @@ function getInitials(name = '', fallback = 'US') {
   return initials || fallback;
 }
 
-const formatPoints = (value) => Number(value || 0).toLocaleString(undefined, {
-  maximumFractionDigits: 2
-});
+const formatPoints = (value) => toWholeNumber(value).toLocaleString();
 
 function AccountProfileCard({
   user,
@@ -29,7 +28,8 @@ function AccountProfileCard({
   roleClassName = 'bg-blue-600',
   fallbackName = 'ผู้ใช้งานระบบ',
   fallbackInitials = 'US',
-  pointsBalance = null
+  pointsBalance = null,
+  onPasswordResetEmailSent = null
 }) {
   const fullName = profileForm.FullName || fallbackName;
   const [sendingPasswordEmail, setSendingPasswordEmail] = useState(false);
@@ -50,17 +50,26 @@ function AccountProfileCard({
     try {
       await sendPasswordResetEmail(auth, email);
       setPasswordEmailSent(true);
+      setPasswordEmailError('');
+      onPasswordResetEmailSent?.(email);
     } catch (error) {
+      setPasswordEmailSent(false);
       if (error.code === 'auth/too-many-requests') {
         setPasswordEmailError('มีการส่งอีเมลหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง');
       } else if (error.code === 'auth/invalid-email') {
         setPasswordEmailError('รูปแบบอีเมลของบัญชีนี้ไม่ถูกต้อง');
+      } else if (error.code === 'auth/network-request-failed') {
+        setPasswordEmailError('ไม่สามารถส่งอีเมลได้เนื่องจากปัญหาเครือข่าย ระบบจะยังไม่ออกจากระบบ กรุณาตรวจสอบอินเทอร์เน็ตแล้วกดส่งใหม่อีกครั้ง');
       } else {
-        setPasswordEmailError('ไม่สามารถส่งอีเมลเปลี่ยนรหัสผ่านได้ กรุณาลองใหม่อีกครั้ง');
+        setPasswordEmailError('ไม่สามารถส่งอีเมลเปลี่ยนรหัสผ่านได้ ระบบจะยังไม่ออกจากระบบ กรุณาลองส่งใหม่อีกครั้ง');
       }
     } finally {
       setSendingPasswordEmail(false);
     }
+  };
+
+  const handlePasswordEmailReceived = () => {
+    onPasswordResetEmailSent?.();
   };
 
   return (
@@ -156,23 +165,34 @@ function AccountProfileCard({
                 ระบบจะส่งอีเมลยืนยันตัวตนไปที่อีเมลบัญชีนี้
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleSendPasswordResetEmail}
-              disabled={sendingPasswordEmail || !user?.email}
-              className="shrink-0 rounded-xl bg-slate-800 px-4 py-2.5 text-xs font-black text-white shadow-sm transition-all hover:bg-slate-900 active:scale-95 disabled:bg-slate-300"
-            >
-              {sendingPasswordEmail
-                ? 'กำลังส่งอีเมล...'
-                : passwordEmailSent
-                  ? 'ส่งอีเมลซ้ำ'
-                  : 'ส่งอีเมลเปลี่ยนรหัสผ่าน'}
-            </button>
+            <div className="shrink-0 flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={handleSendPasswordResetEmail}
+                disabled={sendingPasswordEmail || !user?.email}
+                className="rounded-xl bg-slate-800 px-4 py-2.5 text-xs font-black text-white shadow-sm transition-all hover:bg-slate-900 active:scale-95 disabled:bg-slate-300"
+              >
+                {sendingPasswordEmail
+                  ? 'กำลังส่งอีเมล...'
+                  : passwordEmailSent
+                    ? 'ส่งอีเมลอีกครั้ง'
+                    : 'ส่งอีเมลเปลี่ยนรหัสผ่าน'}
+              </button>
+              {passwordEmailSent && !onPasswordResetEmailSent && (
+                <button
+                  type="button"
+                  onClick={handlePasswordEmailReceived}
+                  className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-black text-emerald-700 shadow-sm transition-all hover:bg-emerald-100 active:scale-95"
+                >
+                  ได้รับอีเมลแล้ว
+                </button>
+              )}
+            </div>
           </div>
 
           {passwordEmailSent && (
             <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs font-bold leading-relaxed text-emerald-700">
-              ส่งอีเมลสำหรับเปลี่ยนรหัสผ่านแล้ว กรุณาตรวจสอบกล่องข้อความหรืออีเมลขยะ (Spam) 
+              ส่งอีเมลสำหรับเปลี่ยนรหัสผ่านแล้ว กรุณาตรวจสอบกล่องข้อความหรืออีเมลขยะ (Spam) หากยังไม่ได้รับให้กดส่งอีเมลอีกครั้ง และเมื่อได้รับแล้วให้กดปุ่มได้รับอีเมลแล้วเพื่อออกจากระบบ
             </div>
           )}
 

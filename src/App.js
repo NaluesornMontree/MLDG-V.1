@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './firebase'; 
-import { onAuthStateChanged, sendEmailVerification, signOut } from "firebase/auth";
+import { onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore"; 
 import Auth from './components/Auth';
 import OwnerDashboard from './components/OwnerDashboard'; 
@@ -8,6 +8,76 @@ import StaffDashboard from './components/StaffDashboard';
 import CustomerDashboard from './components/CustomerDashboard'; 
 import LaneManagement from './components/LaneManagement';
 import ReviewManagement from './components/ReviewManagement';
+import Popup from './components/Popup';
+
+function getAlertType(message) {
+  const text = String(message || '').toLowerCase();
+  if (
+    text.includes('ผิดพลาด') ||
+    text.includes('ไม่สามารถ') ||
+    text.includes('error') ||
+    text.includes('failed') ||
+    text.includes('ถูกระงับ') ||
+    text.includes('ยกเลิกบิล')
+  ) {
+    return 'danger';
+  }
+
+  if (
+    text.includes('กรุณา') ||
+    text.includes('ยังไม่') ||
+    text.includes('ต้อง') ||
+    text.includes('warning')
+  ) {
+    return 'warning';
+  }
+
+  return 'info';
+}
+
+function getAlertTitle(type) {
+  if (type === 'danger') return 'เกิดข้อผิดพลาด';
+  if (type === 'warning') return 'แจ้งเตือน';
+  return 'แจ้งเตือนจากระบบ';
+}
+
+function BrowserAlertPopupBridge() {
+  const [popupQueue, setPopupQueue] = useState([]);
+
+  useEffect(() => {
+    const nativeAlert = window.alert;
+
+    window.alert = (message = '') => {
+      const text = String(message || '');
+      const type = getAlertType(text);
+      setPopupQueue((currentQueue) => [
+        ...currentQueue,
+        {
+          id: Date.now() + Math.random(),
+          type,
+          title: getAlertTitle(type),
+          message: text
+        }
+      ]);
+    };
+
+    return () => {
+      window.alert = nativeAlert;
+    };
+  }, []);
+
+  const activePopup = popupQueue[0];
+
+  return (
+    <Popup
+      isOpen={Boolean(activePopup)}
+      type={activePopup?.type}
+      title={activePopup?.title}
+      message={activePopup?.message}
+      onConfirm={() => setPopupQueue((currentQueue) => currentQueue.slice(1))}
+    />
+  );
+}
 
 function PublicPortal({ onLoginRequest }) {
   const [activePublicTab, setActivePublicTab] = useState('lanes');
@@ -201,13 +271,20 @@ function PublicPortal({ onLoginRequest }) {
   );
 }
 
-function App() {
+function AppContent() {
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null); 
   const [loading, setLoading] = useState(true);
   const [resendingVerification, setResendingVerification] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [authTransitioning, setAuthTransitioning] = useState(false);
+  const [passwordResetPopup, setPasswordResetPopup] = useState({
+    isOpen: false,
+    email: '',
+    sending: false,
+    notice: '',
+    error: ''
+  });
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -236,6 +313,69 @@ function App() {
 
   const handleLogout = () => {
     signOut(auth).then(() => alert("ออกจากระบบเรียบร้อยแล้ว"));
+  };
+
+  const handlePasswordResetEmailSent = async (email) => {
+    setPasswordResetPopup({
+      isOpen: true,
+      email,
+      sending: false,
+      notice: 'ส่งอีเมลเปลี่ยนรหัสผ่านเรียบร้อยแล้ว กรุณาตรวจสอบกล่องข้อความหรืออีเมลขยะ',
+      error: ''
+    });
+
+    try {
+      await signOut(auth);
+    } catch (error) {
+      setPasswordResetPopup((current) => ({
+        ...current,
+        error: 'ส่งอีเมลสำเร็จแล้ว แต่ไม่สามารถออกจากระบบอัตโนมัติได้ กรุณากดออกจากระบบด้วยตนเอง'
+      }));
+    }
+  };
+
+  const handleResendPasswordResetEmail = async () => {
+    if (!passwordResetPopup.email) return;
+
+    setPasswordResetPopup((current) => ({
+      ...current,
+      sending: true,
+      notice: '',
+      error: ''
+    }));
+
+    try {
+      await sendPasswordResetEmail(auth, passwordResetPopup.email);
+      setPasswordResetPopup((current) => ({
+        ...current,
+        sending: false,
+        notice: 'ส่งอีเมลเปลี่ยนรหัสผ่านอีกครั้งแล้ว กรุณาตรวจสอบกล่องข้อความหรืออีเมลขยะ',
+        error: ''
+      }));
+    } catch (error) {
+      setPasswordResetPopup((current) => ({
+        ...current,
+        sending: false,
+        notice: '',
+        error:
+          error.code === 'auth/too-many-requests'
+            ? 'มีการส่งอีเมลหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง'
+            : error.code === 'auth/network-request-failed'
+              ? 'ไม่สามารถส่งอีเมลได้เนื่องจากปัญหาเครือข่าย กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่'
+              : 'ไม่สามารถส่งอีเมลเปลี่ยนรหัสผ่านได้ กรุณาลองใหม่อีกครั้ง'
+      }));
+    }
+  };
+
+  const handlePasswordResetEmailReceived = () => {
+    setPasswordResetPopup({
+      isOpen: false,
+      email: '',
+      sending: false,
+      notice: '',
+      error: ''
+    });
+    setShowAuth(true);
   };
 
   const handleOpenAuth = () => {
@@ -281,6 +421,59 @@ function App() {
     window.location.reload();
   };
 
+  const passwordResetPopupElement = passwordResetPopup.isOpen ? (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm modal-overlay-transition">
+      <div className="modal-card-transition w-full max-w-md rounded-3xl border border-slate-200 bg-white p-5 text-left shadow-2xl sm:p-6">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-700">
+          <span className="h-3 w-3 rounded-full bg-emerald-600" />
+        </div>
+        <h3 className="text-lg font-black text-slate-900">ส่งอีเมลเปลี่ยนรหัสผ่านแล้ว</h3>
+        <p className="mt-2 text-sm font-bold leading-6 text-slate-500">
+          ระบบออกจากระบบเพื่อความปลอดภัยแล้ว กรุณาตรวจสอบอีเมล
+          <span className="mx-1 font-black text-slate-800">{passwordResetPopup.email}</span>
+          หากยังไม่ได้รับสามารถกดส่งอีเมลอีกครั้งได้
+        </p>
+
+        {passwordResetPopup.notice && (
+          <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs font-bold leading-relaxed text-emerald-700">
+            {passwordResetPopup.notice}
+          </div>
+        )}
+
+        {passwordResetPopup.error && (
+          <div className="mt-4 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs font-bold leading-relaxed text-rose-600">
+            {passwordResetPopup.error}
+          </div>
+        )}
+
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={handleResendPasswordResetEmail}
+            disabled={passwordResetPopup.sending}
+            className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-95 disabled:bg-slate-300 disabled:text-white"
+          >
+            {passwordResetPopup.sending ? 'กำลังส่งอีเมล...' : 'ส่งอีเมลอีกครั้ง'}
+          </button>
+          <button
+            type="button"
+            onClick={handlePasswordResetEmailReceived}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 shadow-sm transition-all hover:bg-slate-50 active:scale-95"
+          >
+            ได้รับอีเมลแล้ว
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  const withPasswordResetPopup = (content) => (
+    <>
+      {content}
+      {passwordResetPopupElement}
+    </>
+  );
+
   if (loading) return (
     <div className="flex h-screen items-center justify-center bg-emerald-900 text-white font-bold animate-pulse">
       MUANG LOEI DRIVE GOLF IS LOADING...
@@ -290,7 +483,7 @@ function App() {
   // กรณีที่ 1: ยังไม่ได้เข้าสู่ระบบ ให้ดูหน้าสาธารณะได้ก่อน
   if (!user) {
     if (showAuth) {
-      return (
+      return withPasswordResetPopup(
         <div className={`min-h-screen bg-slate-50 transition-all duration-300 ease-out motion-safe:animate-[screenEnter_0.35s_ease-out] ${authTransitioning ? 'translate-y-4 opacity-0' : 'translate-y-0 opacity-100'}`}>
           <div className="fixed left-4 top-4 z-50 sm:left-6 sm:top-6">
             <button
@@ -306,7 +499,7 @@ function App() {
       );
     }
 
-    return (
+    return withPasswordResetPopup(
       <div className={`transition-all duration-300 ease-out motion-safe:animate-[screenEnter_0.35s_ease-out] ${authTransitioning ? '-translate-y-6 opacity-0' : 'translate-y-0 opacity-100'}`}>
         <PublicPortal onLoginRequest={handleOpenAuth} />
       </div>
@@ -315,7 +508,7 @@ function App() {
 
   // กรณีที่ 2: เข้าสู่ระบบแล้ว แต่ยังไม่ได้ยืนยันอีเมล
   if (!user.emailVerified) {
-    return (
+    return withPasswordResetPopup(
       <div className="flex flex-col items-center justify-center h-screen bg-slate-50 p-6">
         <div className="w-full max-w-sm rounded-[2rem] border-t-8 border-amber-500 bg-white p-6 text-center shadow-2xl sm:p-10 sm:rounded-[3rem]">
           <h2 className="text-xl font-black text-slate-800">กรุณายืนยันอีเมลของคุณ</h2>
@@ -354,12 +547,21 @@ function App() {
 
   // กรณีที่ 3: ผ่านการตรวจสอบแล้ว แยกการสลับหน้าแดชบอร์ดให้ตรงตามสิทธิ์จริง
   if (role === 'owner') {
-    return <OwnerDashboard user={user} userData={userData} handleLogout={handleLogout} />;
+    return withPasswordResetPopup(<OwnerDashboard user={user} userData={userData} handleLogout={handleLogout} onPasswordResetEmailSent={handlePasswordResetEmailSent} />);
   } else if (role === 'staff') {
-    return <StaffDashboard user={user} userData={userData} handleLogout={handleLogout} />;
+    return withPasswordResetPopup(<StaffDashboard user={user} userData={userData} handleLogout={handleLogout} onPasswordResetEmailSent={handlePasswordResetEmailSent} />);
   } else {
-    return <CustomerDashboard user={user} userData={userData} handleLogout={handleLogout} />;
+    return withPasswordResetPopup(<CustomerDashboard user={user} userData={userData} handleLogout={handleLogout} onPasswordResetEmailSent={handlePasswordResetEmailSent} />);
   }
+}
+
+function App() {
+  return (
+    <>
+      <AppContent />
+      <BrowserAlertPopupBridge />
+    </>
+  );
 }
 
 export default App;

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, increment, serverTimestamp } from "firebase/firestore";
 import { theme } from '../styles/theme';
+import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
 
 function Checkout({ userId }) {
   // 1. สร้าง State สำหรับเก็บราคาที่ดึงมาจากฐานข้อมูล
@@ -39,9 +40,11 @@ function Checkout({ userId }) {
   }, [userId]);
 
   // 3. คำนวณยอดเงินโดยใช้ราคาจากฐานข้อมูล (Pricing State)
-  const grossTotal = (ballCount * pricing.ballPrice) + (clubCount * pricing.clubPrice) + (isDamaged ? pricing.damageFee : 0);
+  const safeBallCount = Math.max(0, toWholeNumber(ballCount));
+  const safeClubCount = Math.max(0, toWholeNumber(clubCount));
+  const grossTotal = (safeBallCount * pricing.ballPrice) + (safeClubCount * pricing.clubPrice) + (isDamaged ? pricing.damageFee : 0);
   const safePointsToUse = Math.min(
-    Math.floor(Math.max(0, Number(pointsToUse) || 0)),
+    Math.max(0, toWholeNumber(pointsToUse)),
     Math.floor(Number(userPoints) || 0)
   );
   const discount = Math.floor(safePointsToUse / pricing.pointRate); 
@@ -70,13 +73,13 @@ function Checkout({ userId }) {
         {/* รายการลูกกอล์ฟ - แสดงราคาตามฐานข้อมูล */}
         <div className={s.row}>
           <span className={s.label}>ลูกกอล์ฟ ({pricing.ballPrice}.-/ถาด)</span>
-          <input type="number" min="0" value={ballCount} onChange={(e)=>setBallCount(Number(e.target.value))} className={s.input} />
+          <input type="text" inputMode="numeric" pattern="[0-9]*" value={ballCount} onChange={(e)=>setBallCount(normalizeWholeNumberInput(e.target.value))} className={s.input} />
         </div>
 
         {/* รายการเช่าไม้ - แสดงราคาตามฐานข้อมูล */}
         <div className={s.row}>
           <span className={s.label}>เช่าไม้กอล์ฟ ({pricing.clubPrice}.-/รอบ)</span>
-          <input type="number" min="0" value={clubCount} onChange={(e)=>setClubCount(Number(e.target.value))} className={s.input} />
+          <input type="text" inputMode="numeric" pattern="[0-9]*" value={clubCount} onChange={(e)=>setClubCount(normalizeWholeNumberInput(e.target.value))} className={s.input} />
         </div>
 
         {/* ค่าปรับ - แสดงราคาตามฐานข้อมูล */}
@@ -97,7 +100,7 @@ function Checkout({ userId }) {
           </div>
           <div className="text-right">
             <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">ใช้แต้ม (ทุก {pricing.pointRate} แต้ม = ฿1)</p>
-            <input type="number" min="0" step="1" max={Math.floor(Number(userPoints) || 0)} value={safePointsToUse} onChange={(e)=>setPointsToUse(Math.floor(Math.max(0, Number(e.target.value) || 0)))} className={s.input} />
+            <input type="text" inputMode="numeric" pattern="[0-9]*" max={Math.floor(Number(userPoints) || 0)} value={safePointsToUse} onChange={(e)=>setPointsToUse(normalizeWholeNumberInput(e.target.value))} className={s.input} />
           </div>
         </div>
       </div>

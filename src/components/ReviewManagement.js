@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, onSnapshot, doc, deleteDoc } from "firebase/firestore";
+import { collection, onSnapshot, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { theme } from '../styles/theme';
 import Popup from './Popup';
 
-function ReviewManagement({ publicView = false }) {
+function ReviewManagement({ publicView = false, canManageReviews = false }) {
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [summaryStats, setSummaryStats] = useState({
@@ -45,6 +45,12 @@ function ReviewManagement({ publicView = false }) {
           id: doc.id,
           ...doc.data()
         }))
+        .filter((review) => (
+          review.Is_Active !== false &&
+          review.isActive !== false &&
+          review.Review_Status !== 'voided_payment' &&
+          review.reviewStatus !== 'voided_payment'
+        ))
         .sort((a, b) => {
           const aDate = getReviewDate(a);
           const bDate = getReviewDate(b);
@@ -103,7 +109,15 @@ function ReviewManagement({ publicView = false }) {
       onCancel: () => setAlertPopup(prev => ({ ...prev, isOpen: false })),
       onConfirm: async () => {
         try {
-          await deleteDoc(doc(db, "reviews", id));
+          await updateDoc(doc(db, "reviews", id), {
+            Is_Active: false,
+            isActive: false,
+            Review_Status: 'deleted_by_shop',
+            reviewStatus: 'deleted_by_shop',
+            Hidden_Reason: 'shop_removed_review',
+            hiddenReason: 'shop_removed_review',
+            Deleted_At: serverTimestamp()
+          });
           setAlertPopup({
             isOpen: true,
             type: 'info',
@@ -177,7 +191,7 @@ function ReviewManagement({ publicView = false }) {
               <th className="p-4 w-48">ข้อมูลลูกค้า</th>
               <th className="p-4 w-32">คะแนนที่ให้</th>
               <th className="p-4">ข้อเสนอแนะและความคิดเห็น</th>
-              {!publicView && <th className="p-4 text-right w-28">การจัดการ</th>}
+              {canManageReviews && <th className="p-4 text-right w-28">การจัดการ</th>}
             </tr>
           </thead>
           <tbody className="text-slate-600 text-sm font-medium">
@@ -197,7 +211,7 @@ function ReviewManagement({ publicView = false }) {
                 <td className="p-4 whitespace-pre-line text-slate-700 leading-relaxed font-semibold">
                   {getReviewComment(item) ? getReviewComment(item) : <span className="text-slate-400 italic font-normal">ลูกค้าไม่ได้เขียนระบุข้อความประกอบ</span>}
                 </td>
-                {!publicView && (
+                {canManageReviews && (
                   <td className="p-4 text-right">
                     <button 
                       onClick={() => handleDeleteReview(item.id, getReviewCustomerName(item))} 
@@ -211,7 +225,7 @@ function ReviewManagement({ publicView = false }) {
             ))}
             {reviews.length === 0 && (
               <tr>
-                <td colSpan={publicView ? 3 : 4} className="text-center py-12 text-slate-400 italic">ไม่มีข้อมูลคะแนนและความคิดเห็นภายในระบบขณะนี้</td>
+                <td colSpan={canManageReviews ? 4 : 3} className="text-center py-12 text-slate-400 italic">ไม่มีข้อมูลคะแนนและความคิดเห็นภายในระบบขณะนี้</td>
               </tr>
             )}
           </tbody>

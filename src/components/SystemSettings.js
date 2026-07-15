@@ -3,6 +3,7 @@ import { db } from '../firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, setDoc, getDoc } from "firebase/firestore";
 import { theme } from '../styles/theme';
 import Popup from './Popup';
+import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
 
 function SystemSettings() {
   const [services, setServices] = useState([]);
@@ -43,6 +44,8 @@ function SystemSettings() {
     });
   };
 
+  const normalizeWholeHours = (value) => String(value || '').replace(/\D/g, '');
+
   const fetchData = async () => {
     const serviceSnap = await getDocs(collection(db, "service_settings"));
     setServices(serviceSnap.docs.map((d) => ({ ...d.data(), id: d.id })));
@@ -61,18 +64,27 @@ function SystemSettings() {
     const bookingPolicySnap = await getDoc(bookingPolicyRef);
     if (bookingPolicySnap.exists()) {
       const hours = Number(bookingPolicySnap.data().Modify_Limit_Hours);
-      setBookingPolicyHours(Number.isFinite(hours) ? String(hours) : '2');
+      setBookingPolicyHours(Number.isFinite(hours) ? String(Math.max(0, Math.trunc(hours))) : '2');
     }
   };
 
   useEffect(() => { fetchData(); }, []);
 
   const handleAddService = async () => {
-    if (!newService.Service_Name || !newService.Price_Rate || !newService.Service_Unit) return;
+    if (!newService.Service_Name || !newService.Price_Rate || !newService.Service_Unit) {
+      setModal({
+        isOpen: true,
+        type: 'danger',
+        title: 'ข้อมูลไม่ครบถ้วน',
+        message: 'กรุณากรอกชื่อรายการ ราคา และหน่วยค่าบริการให้ครบก่อนเพิ่มรายการ',
+        onConfirm: () => setModal((prev) => ({ ...prev, isOpen: false }))
+      });
+      return;
+    }
 
     await addDoc(collection(db, "service_settings"), {
       Service_Name: newService.Service_Name,
-      Price_Rate: Number(newService.Price_Rate),
+      Price_Rate: toWholeNumber(newService.Price_Rate),
       Service_Unit: newService.Service_Unit,
       Start_Date: newService.Start_Date ? new Date(newService.Start_Date) : null,
       End_Date: newService.End_Date ? new Date(newService.End_Date) : null,
@@ -81,15 +93,31 @@ function SystemSettings() {
     });
 
     setNewService({ Service_Name: '', Price_Rate: '', Service_Unit: '', Start_Date: '', End_Date: '' });
-    fetchData();
+    await fetchData();
+    setModal({
+      isOpen: true,
+      type: 'info',
+      title: 'เพิ่มข้อมูลเสร็จสิ้น',
+      message: `เพิ่มรายการค่าบริการ "${newService.Service_Name}" เข้าระบบเรียบร้อยแล้ว`,
+      onConfirm: () => setModal((prev) => ({ ...prev, isOpen: false }))
+    });
   };
 
   const handleUpdateService = async () => {
-    if (!editServiceData.Service_Name || !editServiceData.Price_Rate || !editServiceData.Service_Unit) return;
+    if (!editServiceData.Service_Name || !editServiceData.Price_Rate || !editServiceData.Service_Unit) {
+      setModal({
+        isOpen: true,
+        type: 'danger',
+        title: 'ข้อมูลไม่ครบถ้วน',
+        message: 'กรุณากรอกชื่อรายการ ราคา และหน่วยค่าบริการให้ครบก่อนบันทึกการแก้ไข',
+        onConfirm: () => setModal((prev) => ({ ...prev, isOpen: false }))
+      });
+      return;
+    }
 
     await updateDoc(doc(db, "service_settings", editingServiceId), {
       Service_Name: editServiceData.Service_Name,
-      Price_Rate: Number(editServiceData.Price_Rate),
+      Price_Rate: toWholeNumber(editServiceData.Price_Rate),
       Service_Unit: editServiceData.Service_Unit,
       Start_Date: editServiceData.Start_Date ? new Date(editServiceData.Start_Date) : null,
       End_Date: editServiceData.End_Date ? new Date(editServiceData.End_Date) : null
@@ -97,7 +125,14 @@ function SystemSettings() {
 
     setIsEditServiceOpen(false);
     setEditingServiceId(null);
-    fetchData();
+    await fetchData();
+    setModal({
+      isOpen: true,
+      type: 'info',
+      title: 'แก้ไขข้อมูลเสร็จสิ้น',
+      message: `แก้ไขข้อมูลค่าบริการ "${editServiceData.Service_Name}" เรียบร้อยแล้ว`,
+      onConfirm: () => setModal((prev) => ({ ...prev, isOpen: false }))
+    });
   };
 
   const getServiceSortTime = (service) => {
@@ -116,7 +151,7 @@ function SystemSettings() {
     }
 
     if (serviceSortBy === 'priceHigh') {
-      return Number(b.Price_Rate || 0) - Number(a.Price_Rate || 0);
+      return toWholeNumber(b.Price_Rate || 0) - toWholeNumber(a.Price_Rate || 0);
     }
 
     return getServiceSortTime(b) - getServiceSortTime(a);
@@ -128,14 +163,14 @@ function SystemSettings() {
 
     if (pointType === 'earn') {
       updateData = {
-        Earning_Rate_Amount: Number(tempEarn.baht),
-        Earning_Rate_Points: Number(tempEarn.points),
+        Earning_Rate_Amount: toWholeNumber(tempEarn.baht),
+        Earning_Rate_Points: toWholeNumber(tempEarn.points),
         Earning_Is_Active: true
       };
     } else {
       updateData = {
-        RDT_Rate_Points: Number(tempRedeem.points),
-        RDT_Rate_Discount: Number(tempRedeem.baht),
+        RDT_Rate_Points: toWholeNumber(tempRedeem.points),
+        RDT_Rate_Discount: toWholeNumber(tempRedeem.baht),
         Redemption_Is_Active: true
       };
     }
@@ -152,13 +187,14 @@ function SystemSettings() {
   };
 
   const saveBookingPolicy = async () => {
-    const hours = Number(bookingPolicyHours);
-    if (!Number.isFinite(hours) || hours < 0) {
+    const normalizedHours = normalizeWholeHours(bookingPolicyHours);
+    const hours = Number(normalizedHours);
+    if (!normalizedHours || !Number.isInteger(hours) || hours < 0) {
       setModal({
         isOpen: true,
         type: 'danger',
         title: 'ข้อมูลไม่ถูกต้อง',
-        message: 'กรุณากรอกจำนวนชั่วโมงเป็นตัวเลข 0 ขึ้นไป',
+        message: 'กรุณากรอกจำนวนชั่วโมงเป็นเลขจำนวนเต็ม 0 ขึ้นไป',
         onConfirm: () => setModal((prev) => ({ ...prev, isOpen: false }))
       });
       return;
@@ -168,6 +204,7 @@ function SystemSettings() {
       Modify_Limit_Hours: hours,
       Updated_At: new Date()
     }, { merge: true });
+    setBookingPolicyHours(String(hours));
 
     setModal({
       isOpen: true,
@@ -231,11 +268,18 @@ function SystemSettings() {
               <label className={s.inputLabel}>จำนวนชั่วโมงก่อนถึงเวลาเริ่มจอง</label>
               <div className="flex flex-col sm:flex-row gap-2">
                 <input
-                  type="number"
-                  min="0"
-                  step="0.5"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={bookingPolicyHours}
-                  onChange={(e) => setBookingPolicyHours(e.target.value)}
+                  onChange={(e) => setBookingPolicyHours(normalizeWholeHours(e.target.value))}
+                  onKeyDown={(e) => {
+                    if (['.', ',', '-', '+', 'e', 'E'].includes(e.key)) e.preventDefault();
+                  }}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    setBookingPolicyHours(normalizeWholeHours(e.clipboardData.getData('text')));
+                  }}
                   className={s.input + ' !py-2.5 text-sm'}
                   placeholder="เช่น 2"
                 />
@@ -290,10 +334,12 @@ function SystemSettings() {
               <div className="text-left">
                 <label className={s.inputLabel}>ราคา (บาท)</label>
                 <input
-                  type="number"
-                  placeholder="0.00"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="0"
                   value={newService.Price_Rate}
-                  onChange={(e) => setNewService({ ...newService, Price_Rate: e.target.value })}
+                  onChange={(e) => setNewService({ ...newService, Price_Rate: normalizeWholeNumberInput(e.target.value) })}
                   className={s.input + ' !py-2.5 text-sm'}
                 />
               </div>
@@ -363,7 +409,7 @@ function SystemSettings() {
                             {item.Service_Name}
                           </span>
                           <span className="text-[11px] text-slate-400 font-bold break-words">
-                            {Number(item.Price_Rate || 0).toLocaleString('th-TH')} บาท{item.Service_Unit ? ` / ${item.Service_Unit}` : ''}
+                            {toWholeNumber(item.Price_Rate || 0).toLocaleString('th-TH')} บาท{item.Service_Unit ? ` / ${item.Service_Unit}` : ''}
                           </span>
                         </div>
                       </div>
@@ -433,22 +479,24 @@ function SystemSettings() {
 
               <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-3 items-center">
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   min="0"
-                  step="0.01"
                   placeholder="ยอดใช้จ่าย (บาท)"
                   value={tempEarn.baht}
-                  onChange={(e) => setTempEarn({ ...tempEarn, baht: e.target.value })}
+                  onChange={(e) => setTempEarn({ ...tempEarn, baht: normalizeWholeNumberInput(e.target.value) })}
                   className={s.input + ' !py-2.5 text-center text-sm'}
                 />
                 <span className="text-sm font-black text-slate-400 text-center">ได้รับ</span>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   min="0"
-                  step="0.01"
                   placeholder="แต้มที่ได้รับ"
                   value={tempEarn.points}
-                  onChange={(e) => setTempEarn({ ...tempEarn, points: e.target.value })}
+                  onChange={(e) => setTempEarn({ ...tempEarn, points: normalizeWholeNumberInput(e.target.value) })}
                   className={s.input + ' !py-2.5 text-center text-sm'}
                 />
               </div>
@@ -492,22 +540,24 @@ function SystemSettings() {
 
               <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-3 items-center">
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   min="0"
-                  step="0.01"
                   placeholder="ใช้แต้ม"
                   value={tempRedeem.points}
-                  onChange={(e) => setTempRedeem({ ...tempRedeem, points: e.target.value })}
+                  onChange={(e) => setTempRedeem({ ...tempRedeem, points: normalizeWholeNumberInput(e.target.value) })}
                   className={s.input + ' !py-2.5 text-center text-sm'}
                 />
                 <span className="text-sm font-black text-slate-400 text-center">แลกได้</span>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   min="0"
-                  step="0.01"
                   placeholder="ส่วนลด (บาท)"
                   value={tempRedeem.baht}
-                  onChange={(e) => setTempRedeem({ ...tempRedeem, baht: e.target.value })}
+                  onChange={(e) => setTempRedeem({ ...tempRedeem, baht: normalizeWholeNumberInput(e.target.value) })}
                   className={s.input + ' !py-2.5 text-center text-sm'}
                 />
               </div>
@@ -536,8 +586,8 @@ function SystemSettings() {
       </div>
 
       {isEditServiceOpen && (
-        <div className={m.overlay}>
-          <div className={m.card + ' !max-w-lg'}>
+        <div className={`${m.overlay} modal-overlay-transition`}>
+          <div className={`${m.card} !max-w-lg modal-card-transition`}>
             <h3 className={m.title}>แก้ไขข้อมูลค่าบริการ</h3>
             <div className="space-y-4 mb-8 text-left">
               <div>
@@ -552,9 +602,11 @@ function SystemSettings() {
                 <div>
                   <label className={s.inputLabel}>ราคา (บาท)</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={editServiceData.Price_Rate}
-                    onChange={(e) => setEditServiceData({ ...editServiceData, Price_Rate: e.target.value })}
+                    onChange={(e) => setEditServiceData({ ...editServiceData, Price_Rate: normalizeWholeNumberInput(e.target.value) })}
                     className={s.input}
                   />
                 </div>

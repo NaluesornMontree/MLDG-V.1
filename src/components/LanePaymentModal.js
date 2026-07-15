@@ -12,6 +12,7 @@ import {
   updateDoc,
   where
 } from 'firebase/firestore';
+import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
 
 function ChevronDownIcon({ className = '' }) {
   return (
@@ -122,9 +123,7 @@ function getContiguousSlots(booking, laneKey, focusedSlot) {
   return TIME_SLOTS_ORDER.slice(startIndex, endIndex + 1);
 }
 
-const formatPoints = (value) => Number(value || 0).toLocaleString(undefined, {
-  maximumFractionDigits: 2
-});
+const formatPoints = (value) => toWholeNumber(value).toLocaleString();
 
 function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
   const [services, setServices] = useState([]);
@@ -148,18 +147,38 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
     [rentedClubs]
   );
   const checkoutLaneNumber = booking?.checkoutLaneNumber || null;
-  const checkoutLaneKey = checkoutLaneNumber ? `lane_${checkoutLaneNumber}` : null;
-  const checkoutSlots = useMemo(() => (
-    booking?.checkoutSlot && checkoutLaneKey
-      ? getContiguousSlots(booking, checkoutLaneKey, booking.checkoutSlot)
-      : Array.isArray(booking?.activeTimeSlots) && booking.activeTimeSlots.length > 0
-        ? booking.activeTimeSlots
-        : Array.isArray(booking?.timeSlots)
-          ? booking.timeSlots
-          : []
-  ), [booking, checkoutLaneKey]);
-  const checkoutLaneLabel = checkoutLaneNumber
-    ? `เลน ${checkoutLaneNumber}`
+  const checkoutLaneNumbers = useMemo(() => {
+    if (Array.isArray(booking?.checkoutLaneNumbers) && booking.checkoutLaneNumbers.length > 0) {
+      return booking.checkoutLaneNumbers
+        .map((lane) => Number(lane))
+        .filter(Number.isFinite)
+        .sort((a, b) => a - b);
+    }
+
+    return checkoutLaneNumber ? [Number(checkoutLaneNumber)].filter(Number.isFinite) : [];
+  }, [booking?.checkoutLaneNumbers, checkoutLaneNumber]);
+  const checkoutLaneKeys = useMemo(
+    () => checkoutLaneNumbers.map((lane) => `lane_${lane}`),
+    [checkoutLaneNumbers]
+  );
+  const checkoutLaneKey = checkoutLaneKeys[0] || null;
+  const checkoutSlots = useMemo(() => {
+    if (Array.isArray(booking?.checkoutSlots) && booking.checkoutSlots.length > 0) {
+      return booking.checkoutSlots;
+    }
+
+    if (booking?.checkoutSlot && checkoutLaneKey) {
+      return getContiguousSlots(booking, checkoutLaneKey, booking.checkoutSlot);
+    }
+
+    if (Array.isArray(booking?.activeTimeSlots) && booking.activeTimeSlots.length > 0) {
+      return booking.activeTimeSlots;
+    }
+
+    return Array.isArray(booking?.timeSlots) ? booking.timeSlots : [];
+  }, [booking, checkoutLaneKey]);
+  const checkoutLaneLabel = checkoutLaneNumbers.length > 0
+    ? checkoutLaneNumbers.map((lane) => `เลน ${lane}`).join(', ')
     : Array.isArray(booking?.selectedLanes) && booking.selectedLanes.length > 0
       ? `เลน ${booking.selectedLanes.join(', ')}`
       : 'ไม่ระบุเลน';
@@ -260,18 +279,18 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
   const availableMemberPoints = memberUserId ? Number(memberPoints || 0) : 0;
 
   const safeUsedPoints = Math.min(
-    Math.floor(Math.max(0, Number(usedPoints) || 0)),
+    Math.max(0, toWholeNumber(usedPoints)),
     Math.floor(availableMemberPoints)
   );
 
   const totalAmount = services.reduce((sum, service) => {
     const qty = quantities[service.id] || 0;
-    const rate = Number(service.Price_Rate || 0);
+    const rate = toWholeNumber(service.Price_Rate || 0);
     return sum + qty * rate;
   }, 0);
 
-  const redemptionRatePoints = Number(pointSettings?.RDT_Rate_Points || 0);
-  const redemptionRateDiscount = Number(pointSettings?.RDT_Rate_Discount || 0);
+  const redemptionRatePoints = toWholeNumber(pointSettings?.RDT_Rate_Points || 0);
+  const redemptionRateDiscount = toWholeNumber(pointSettings?.RDT_Rate_Discount || 0);
   const pointDiscount =
     pointSettings?.Redemption_Is_Active &&
     redemptionRatePoints > 0 &&
@@ -286,8 +305,8 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
       : safeUsedPoints;
   const safePointDiscount = Math.min(totalAmount, Math.floor(Math.max(0, pointDiscount)));
   const netAmount = Math.max(0, totalAmount - safePointDiscount);
-  const earningRateAmount = Number(pointSettings?.Earning_Rate_Amount || 0);
-  const earningRatePoints = Number(pointSettings?.Earning_Rate_Points || 0);
+  const earningRateAmount = toWholeNumber(pointSettings?.Earning_Rate_Amount || 0);
+  const earningRatePoints = toWholeNumber(pointSettings?.Earning_Rate_Points || 0);
   const earnedPoints =
     memberUserId &&
     pointSettings?.Earning_Is_Active &&
@@ -296,8 +315,8 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
       ? Math.floor(Math.floor(netAmount / earningRateAmount) * earningRatePoints)
       : 0;
   const pointBalanceChange = earnedPoints - redeemedPoints;
-  const safeCashAmount = Math.max(0, Number(cashAmount) || 0);
-  const safeTransferAmount = Math.max(0, Number(transferAmount) || 0);
+  const safeCashAmount = Math.max(0, toWholeNumber(cashAmount));
+  const safeTransferAmount = Math.max(0, toWholeNumber(transferAmount));
   const mixedPaymentTotal = safeCashAmount + safeTransferAmount;
 
   const handleQuantityChange = (serviceId, change, options = {}) => {
@@ -334,7 +353,7 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
           return {
             item_name: service.Service_Name,
             qty,
-            price: qty * Number(service.Price_Rate || 0),
+            price: qty * toWholeNumber(service.Price_Rate || 0),
             unit: getServiceUnit(service)
           };
         })
@@ -408,11 +427,22 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
 
       const baseDetailedSlots = getBookingDetailedSlots(booking);
       const baseActiveDetailedSlots = booking.activeDetailedSlots || booking.Active_Detailed_Slots || {};
-      const nextDetailedSlots = checkoutLaneKey
-        ? removeSlotsFromDetailedSlots(baseDetailedSlots, checkoutLaneKey, checkoutSlots)
+      const shouldReleaseWholeLanes = booking.releaseAllSlotsForLanes || booking.releaseAllSlotsForLane;
+      const nextDetailedSlots = checkoutLaneKeys.length > 0
+        ? checkoutLaneKeys.reduce((currentSlots, laneKey) => {
+          const releaseSlots = shouldReleaseWholeLanes
+            ? (baseDetailedSlots[laneKey] || checkoutSlots)
+            : checkoutSlots;
+          return removeSlotsFromDetailedSlots(currentSlots, laneKey, releaseSlots);
+        }, baseDetailedSlots)
         : {};
-      const nextActiveDetailedSlots = checkoutLaneKey
-        ? removeSlotsFromDetailedSlots(baseActiveDetailedSlots, checkoutLaneKey, checkoutSlots)
+      const nextActiveDetailedSlots = checkoutLaneKeys.length > 0
+        ? checkoutLaneKeys.reduce((currentSlots, laneKey) => {
+          const releaseSlots = shouldReleaseWholeLanes
+            ? (baseActiveDetailedSlots[laneKey] || baseDetailedSlots[laneKey] || checkoutSlots)
+            : checkoutSlots;
+          return removeSlotsFromDetailedSlots(currentSlots, laneKey, releaseSlots);
+        }, baseActiveDetailedSlots)
         : {};
       const remainingTimeSlots = getUnionSlotsFromDetailedSlots(nextDetailedSlots);
       const remainingActiveTimeSlots = getUnionSlotsFromDetailedSlots(nextActiveDetailedSlots);
@@ -442,8 +472,10 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
         });
       }
 
-      if (checkoutLaneNumber) {
-        await updateDoc(doc(db, 'lanes', `lane_${checkoutLaneNumber}`), { status: 'available' });
+      if (checkoutLaneNumbers.length > 0) {
+        await Promise.all(checkoutLaneNumbers.map((laneNumber) => (
+          updateDoc(doc(db, 'lanes', `lane_${laneNumber}`), { status: 'available' })
+        )));
       }
 
       onClose();
@@ -463,8 +495,8 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 p-3 backdrop-blur-sm animate-fadeIn sm:p-4">
-      <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-4xl flex-col overflow-y-auto rounded-3xl border border-slate-100 bg-white p-4 text-left shadow-2xl sm:max-h-[calc(100vh-2rem)] sm:rounded-[2rem] sm:p-8">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 p-3 backdrop-blur-sm modal-overlay-transition sm:p-4">
+      <div className="modal-card-transition flex max-h-[calc(100vh-1.5rem)] w-full max-w-4xl flex-col overflow-y-auto rounded-3xl border border-slate-100 bg-white p-4 text-left shadow-2xl sm:max-h-[calc(100vh-2rem)] sm:rounded-[2rem] sm:p-8">
         <div className="mb-4 sm:mb-6">
           <h2 className="text-2xl font-extrabold tracking-tight text-slate-800">
             ใบสรุปรายการและคิดเงินรับชำระ
@@ -533,7 +565,7 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
               ) : (
                 services.map((service) => {
                   const currentQty = quantities[service.id] || 0;
-                  const priceRate = Number(service.Price_Rate || 0);
+                  const priceRate = toWholeNumber(service.Price_Rate || 0);
                   const serviceName = service.Service_Name || '';
                   const clubRental = isClubRentalService(serviceName);
                   const isLockedClubRental = clubRental && booking.needsClubRent;
@@ -682,12 +714,12 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
                 <div className="flex items-center space-x-2">
                   <span className="font-semibold text-slate-500">ส่วนลดแต้ม:</span>
                   <input
-                    type="number"
-                    min="0"
-                    step="1"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={safeUsedPoints}
                     max={Math.floor(availableMemberPoints)}
-                    onChange={(e) => setUsedPoints(Math.floor(Math.max(0, Number(e.target.value) || 0)))}
+                    onChange={(e) => setUsedPoints(normalizeWholeNumberInput(e.target.value))}
                     className="w-20 rounded-lg border border-slate-200 bg-white py-1 text-center font-mono text-sm font-bold text-slate-800 focus:border-emerald-500 focus:outline-none"
                   />
                   <span>แต้ม</span>
@@ -765,10 +797,12 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
                     <label className="space-y-1">
                       <span className="block text-xs font-bold text-slate-500">เงินสด</span>
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         min="0"
                         value={cashAmount}
-                        onChange={(e) => setCashAmount(Math.max(0, Number(e.target.value) || 0))}
+                        onChange={(e) => setCashAmount(normalizeWholeNumberInput(e.target.value))}
                         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-800 outline-none transition-all focus:border-emerald-500 focus:bg-white"
                         placeholder="0"
                       />
@@ -777,11 +811,13 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
                     <label className="space-y-1">
                       <span className="block text-xs font-bold text-slate-500">เงินโอน</span>
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         min="0"
                         value={transferAmount}
                         onChange={(e) =>
-                          setTransferAmount(Math.max(0, Number(e.target.value) || 0))
+                          setTransferAmount(normalizeWholeNumberInput(e.target.value))
                         }
                         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-800 outline-none transition-all focus:border-emerald-500 focus:bg-white"
                         placeholder="0"

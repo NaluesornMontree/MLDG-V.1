@@ -12,6 +12,7 @@ import {
     sortGolfClubsLikeInventory
 } from '../utils/golfClubUtils';
 import { areSelectedSlotsContiguous, isSelectedSlotsDraftValid } from '../utils/bookingTimeUtils';
+import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
 
 const BookingFlow = ({ user, userData }) => {
     const [step, setStep] = useState(1);
@@ -345,7 +346,7 @@ const BookingFlow = ({ user, userData }) => {
 
     const hasMoreSelectedLanesThanGuests = () => {
         const selectedLaneCount = getSelectedLanesArray().length;
-        const guestCount = Number(bookingData.guests || 0);
+        const guestCount = toWholeNumber(bookingData.guests || 0);
         return selectedLaneCount > guestCount;
     };
 
@@ -407,7 +408,7 @@ const BookingFlow = ({ user, userData }) => {
             const lanesArray = getSelectedLanesArray();
             const allTimeSlots = Array.from(new Set(Object.values(selectedSlots).flat())).sort();
 
-            if (lanesArray.length > Number(bookingData.guests || 0)) {
+            if (lanesArray.length > toWholeNumber(bookingData.guests || 0)) {
                 showAlert('จำนวนเลนที่เลือกมากกว่าจำนวนผู้เข้าใช้งาน กรุณาปรับจำนวนผู้เข้าใช้งานหรือเลือกเลนให้น้อยลง', 'warning');
                 return;
             }
@@ -426,7 +427,7 @@ const BookingFlow = ({ user, userData }) => {
                 customerEmail: getMemberEmail(),
                 User_ID: user?.uid || '',
                 bookingType: 'online-member',
-                guestCount: Number(bookingData.guests || 1),
+                guestCount: Math.max(1, toWholeNumber(bookingData.guests || 1)),
                 needsInstructor: bookingData.needsInstructor,
                 needsClubRent: bookingData.needsClubRent,
                 selectedLanes: lanesArray, 
@@ -447,7 +448,7 @@ const BookingFlow = ({ user, userData }) => {
                     customerPhone: bookingData.phone,
                     customerEmail: getMemberEmail(),
                     User_ID: user?.uid || '',
-                    guestCount: Number(bookingData.guests || 1)
+                    guestCount: Math.max(1, toWholeNumber(bookingData.guests || 1))
                 });
             }
 
@@ -728,11 +729,12 @@ const BookingFlow = ({ user, userData }) => {
                         <div>
                             <label className="block text-base font-bold text-slate-800 mb-1">จำนวนผู้เข้ามาใช้งาน</label>
                             <input 
-                                type="number"
-                                min="1"
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
                                 value={bookingData.guests}
                                 className="w-full bg-slate-50 border border-slate-100 p-3 rounded-xl focus:outline-none focus:border-emerald-400 font-bold"
-                                onChange={(e) => setBookingData({ ...bookingData, guests: Number(e.target.value) })}
+                                onChange={(e) => setBookingData({ ...bookingData, guests: normalizeWholeNumberInput(e.target.value) })}
                             />
                         </div>
 
