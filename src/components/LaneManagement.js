@@ -325,6 +325,62 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
     (laneNum) => baseLanes[laneNum.toString()]?.status === 'maintenance'
   ).length;
 
+  const getBookingLaneNumbers = (booking = {}) => {
+    const detailedSlots = booking.detailedSlots || booking.Detailed_Slots || {};
+    const detailedLaneNumbers = Object.keys(detailedSlots || {})
+      .map((key) => Number(String(key).replace('lane_', '')))
+      .filter(Number.isFinite);
+
+    const selectedLaneNumbers = Array.isArray(booking.selectedLanes)
+      ? booking.selectedLanes.map(Number).filter(Number.isFinite)
+      : [];
+
+    const fallbackLaneNumbers = booking.laneNum || booking.laneNumber
+      ? String(booking.laneNum || booking.laneNumber)
+        .split(',')
+        .map((lane) => Number(lane.trim()))
+        .filter(Number.isFinite)
+      : [];
+
+    return Array.from(new Set([
+      ...detailedLaneNumbers,
+      ...selectedLaneNumbers,
+      ...fallbackLaneNumbers
+    ]));
+  };
+
+  const findBlockingBookingsForLanes = async (targetLanes = []) => {
+    const targetLaneSet = new Set(targetLanes.map(Number));
+    const activeStatuses = ['pending', 'confirmed', 'occupied'];
+    const activeBookingsQuery = query(
+      collection(db, "bookings"),
+      where("status", "in", activeStatuses)
+    );
+    const bookingSnapshot = await getDocs(activeBookingsQuery);
+
+    return bookingSnapshot.docs
+      .map((bookingDoc) => ({ id: bookingDoc.id, ...bookingDoc.data() }))
+      .filter((booking) => getBookingLaneNumbers(booking).some((laneNum) => targetLaneSet.has(laneNum)));
+  };
+
+  const formatBlockingMaintenanceMessage = (blockingBookings = [], targetLanes = []) => {
+    const targetLaneSet = new Set(targetLanes.map(Number));
+    const blockingByLane = blockingBookings.reduce((acc, booking) => {
+      getBookingLaneNumbers(booking).forEach((laneNum) => {
+        if (!targetLaneSet.has(laneNum)) return;
+        if (!acc[laneNum]) acc[laneNum] = new Set();
+        acc[laneNum].add(booking.bookingDate || booking.Booking_Date || 'ไม่ระบุวันที่');
+      });
+      return acc;
+    }, {});
+
+    return Object.keys(blockingByLane)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .map((laneNum) => `เลน ${laneNum}: ${Array.from(blockingByLane[laneNum]).sort().join(', ')}`)
+      .join('\n');
+  };
+
   const findMemberByEmail = async (email) => {
     const trimmedEmail = email.trim();
     const normalizedEmail = trimmedEmail.toLowerCase();
@@ -797,6 +853,18 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
     if (lanesArray.length === 0) return;
 
     try {
+      const blockingBookings = await findBlockingBookingsForLanes(lanesArray);
+      if (blockingBookings.length > 0) {
+        setAlertPopup({
+          isOpen: true,
+          type: 'warning',
+          title: 'ไม่สามารถปิดเลนได้',
+          message: `เลนที่เลือกมีรายการจองหรือกำลังใช้งานอยู่ กรุณาจัดการรายการเหล่านี้ก่อนปิดปรับปรุง\n\n${formatBlockingMaintenanceMessage(blockingBookings, lanesArray)}`,
+          onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
+        });
+        return;
+      }
+
       for (const num of lanesArray) {
         const docId = `lane_${num}`;
         await setDoc(doc(db, "lanes", docId), {

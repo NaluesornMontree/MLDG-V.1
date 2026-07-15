@@ -13,6 +13,7 @@ import {
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { theme } from '../styles/theme'; 
 import { findUserByPhoneNumber, getDuplicatePhoneMessage, normalizePhoneNumber } from '../utils/userPhoneUtils';
+import { getFirebaseAuthErrorMessage } from '../utils/firebaseErrorMessages';
 
 function Auth() {
   const [email, setEmail] = useState('');
@@ -76,7 +77,10 @@ function Auth() {
         setMode('login');
       }
     } catch (err) {
-      alert("เกิดข้อผิดพลาด: " + err.message);
+      const fallbackMessage = mode === 'login'
+        ? 'ไม่สามารถเข้าสู่ระบบได้ กรุณาตรวจสอบอีเมลและรหัสผ่านแล้วลองอีกครั้ง'
+        : 'ไม่สามารถสมัครสมาชิกได้ กรุณาตรวจสอบข้อมูลแล้วลองอีกครั้ง';
+      alert(getFirebaseAuthErrorMessage(err, fallbackMessage));
     } finally {
       setLoading(false);
     }
@@ -109,7 +113,7 @@ function Auth() {
         }
       }
     } catch (err) {
-      alert("การเข้าสู่ระบบด้วย Google เกิดข้อผิดพลาด: " + err.message);
+      alert(`การเข้าสู่ระบบด้วย Google ไม่สำเร็จ: ${getFirebaseAuthErrorMessage(err, 'กรุณาลองเข้าสู่ระบบด้วย Google อีกครั้ง')}`);
     } finally {
       setLoading(false);
     }
@@ -144,7 +148,7 @@ function Auth() {
         }
       }
     } catch (err) {
-      alert("การเข้าสู่ระบบด้วย Facebook เกิดข้อผิดพลาด: " + err.message);
+      alert(`การเข้าสู่ระบบด้วย Facebook ไม่สำเร็จ: ${getFirebaseAuthErrorMessage(err, 'กรุณาลองเข้าสู่ระบบด้วย Facebook อีกครั้ง')}`);
     } finally {
       setLoading(false);
     }
@@ -156,7 +160,9 @@ function Auth() {
       await sendPasswordResetEmail(auth, email);
       alert("ส่งลิงก์รีเซ็ตรหัสผ่านไปที่อีเมลแล้ว");
       setMode('login');
-    } catch (err) { alert(err.message); }
+    } catch (err) {
+      alert(`ไม่สามารถส่งอีเมลรีเซ็ตรหัสผ่านได้: ${getFirebaseAuthErrorMessage(err, 'กรุณาตรวจสอบอีเมลแล้วลองอีกครั้ง')}`);
+    }
   };
 
   return (
@@ -191,12 +197,12 @@ function Auth() {
       </style>
       <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/20 bg-white/92 p-6 text-slate-800 shadow-2xl shadow-emerald-950/30 backdrop-blur-xl transition-all duration-300 ease-out sm:p-10 sm:rounded-[2.5rem]">
         <div key={mode} className="auth-mode-panel">
-        <div className={s.header}>
-          <h2 className={s.title}>
+        <div className={`${s.header || ''} mb-7 sm:mb-8`}>
+          <h2 className="text-3xl font-black tracking-[0.12em] text-white drop-shadow-[0_2px_10px_rgba(15,23,42,0.35)] sm:text-4xl">
             {mode === 'forgot' ? 'RESET PASSWORD' : mode === 'register' ? 'REGISTER' : 'LOGIN'}
           </h2>
-          <div className="auth-mode-accent mx-auto mt-3 h-1 w-16 rounded-full bg-emerald-500/70" />
-          <p className="text-[10px] font-black text-slate-400 tracking-[0.2em] mt-3">
+          <div className="auth-mode-accent mx-auto mt-3 h-1 w-20 rounded-full bg-slate-300" />
+          <p className="mt-4 text-[10px] font-black tracking-[0.2em] text-slate-400">
             MUANG LOEI GOLF MANAGEMENT
           </p>
         </div>

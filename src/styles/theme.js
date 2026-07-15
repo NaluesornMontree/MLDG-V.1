@@ -9,7 +9,7 @@ export const theme = {
     wrapper: "min-h-screen bg-emerald-900 flex items-center justify-center p-4 font-sans",
     card: "w-full max-w-md bg-white p-6 sm:p-10 rounded-3xl sm:rounded-[2.5rem] shadow-2xl",
     input: "w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl mb-4 outline-none",
-    btnPrimary: "w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl"
+    btnPrimary: "w-full bg-emerald-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-emerald-900/20 transition-all hover:bg-emerald-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
   },
   checkout: {
     container: "max-w-xl mx-auto p-4 sm:p-8 bg-white rounded-3xl sm:rounded-[2.5rem] shadow-2xl border-t-[12px] border-emerald-600 mt-4 sm:mt-10 font-sans",

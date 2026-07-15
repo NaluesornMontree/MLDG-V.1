@@ -9,12 +9,20 @@ import CustomerDashboard from './components/CustomerDashboard';
 import LaneManagement from './components/LaneManagement';
 import ReviewManagement from './components/ReviewManagement';
 import Popup from './components/Popup';
+import { normalizeFirebaseErrorMessage } from './utils/firebaseErrorMessages';
 
 function getAlertType(message) {
   const text = String(message || '').toLowerCase();
   if (
     text.includes('ผิดพลาด') ||
     text.includes('ไม่สามารถ') ||
+    text.includes('ผิดพลาด') ||
+    text.includes('ไม่สามารถ') ||
+    text.includes('ไม่ถูกต้อง') ||
+    text.includes('ไม่สำเร็จ') ||
+    text.includes('ไม่พบ') ||
+    text.includes('ถูกระงับ') ||
+    text.includes('บล็อก') ||
     text.includes('error') ||
     text.includes('failed') ||
     text.includes('ถูกระงับ') ||
@@ -49,14 +57,15 @@ function BrowserAlertPopupBridge() {
 
     window.alert = (message = '') => {
       const text = String(message || '');
-      const type = getAlertType(text);
+      const readableText = normalizeFirebaseErrorMessage(text);
+      const type = getAlertType(`${text} ${readableText}`);
       setPopupQueue((currentQueue) => [
         ...currentQueue,
         {
           id: Date.now() + Math.random(),
           type,
           title: getAlertTitle(type),
-          message: text
+          message: readableText
         }
       ]);
     };

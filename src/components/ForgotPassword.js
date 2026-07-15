@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { auth } from '../firebase'; // ตรวจสอบ path ให้ตรงกับที่ระบุใน App.js
 import { sendPasswordResetEmail } from 'firebase/auth';
+import { getFirebaseAuthErrorMessage } from '../utils/firebaseErrorMessages';
 
 export default function ForgotPassword({ onBackToLogin }) {
   const [email, setEmail] = useState('');
@@ -28,14 +29,7 @@ export default function ForgotPassword({ onBackToLogin }) {
       setEmail(''); // เคลียร์ช่องกรอกข้อมูล
     } catch (err) {
       console.error(err);
-      // แปลความหมาย Error พื้นฐานให้ผู้ใช้เข้าใจง่าย
-      if (err.code === 'auth/user-not-found') {
-        setError('ไม่พบอีเมลนี้ในระบบการใช้งานครับ');
-      } else if (err.code === 'auth/invalid-email') {
-        setError('รูปแบบอีเมลไม่ถูกต้อง');
-      } else {
-        setError('เกิดข้อผิดพลาดในระบบ ไม่สามารถส่งอีเมลได้');
-      }
+      setError(getFirebaseAuthErrorMessage(err, 'ไม่สามารถส่งอีเมลรีเซ็ตรหัสผ่านได้ กรุณาตรวจสอบอีเมลแล้วลองอีกครั้ง'));
     } finally {
       setLoading(false);
     }
@@ -69,8 +63,8 @@ export default function ForgotPassword({ onBackToLogin }) {
           <button 
             type="submit"
             disabled={loading}
-            className={`w-full py-3 rounded-xl font-black text-white text-sm shadow-md transition-all uppercase tracking-wider ${
-              loading ? 'bg-emerald-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'
+            className={`w-full py-3.5 rounded-xl font-black text-white text-sm shadow-lg transition-all uppercase tracking-wider ${
+              loading ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-emerald-700 hover:bg-emerald-800 shadow-emerald-900/20 active:scale-[0.98]'
             }`}
           >
             {loading ? 'กำลังส่งข้อมูล...' : 'ส่งลิงก์รีเซ็ตรหัสผ่าน'}

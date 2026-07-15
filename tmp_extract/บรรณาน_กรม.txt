@@ -1,0 +1,84 @@
+
+
+--- PAGE 1 | บรรณานุกรม.pdf ---
+64
+บรรณานุกรม
+จอช ฟรูห์ลิง. (2567, 1 มีนาคม). What is JavaScript? The full-stack programming language.
+Infoworld. https://www.infoworld.com/article/2263137/what-is-javascript-the-
+full-stack-programming-language.html
+จีราวุธ วารินทร์. (2565). ติดตั้ง Firebase CLI. ใน พันจันทร์ ธนวัฒนเสถียร (บ.ก.), ต่อยอดพัฒนาเว็บ
+แอพพลิเคชันด้วย React + Firebase (น. 220). บริษัท รีไวว่า จำกัด.
+จีราวุธ วารินทร์. (2565). ทบทวนเกี่ยวกับ SQL และ NOSQL. ใน พันจันทร์ ธนวัฒนเสถียร (บ.ก.), ต่อ
+ยอดพัฒนาเว็บแอพพลิเคชันด้วย React + Firebase (น. 2). บริษัท รีไวว่า จำกัด.
+จีราวุธ วารินทร์. (2565). บริการ Firebase Hosting. ใน พันจันทร์ ธนวัฒนเสถียร (บ.ก.), ต่อยอด
+พัฒนาเว็บแอพพลิเคชันด้วย React + Firebase (น. 219). บริษัท รีไวว่า จำกัด.
+จีราวุธ วารินทร์. (2565). พื้นฐานเกี่ยวกับ Firebase Authentication. ใน พันจันทร์ ธนวัฒนเสถียร
+(บ.ก.), ต่อยอดพัฒนาเว็บแอพพลิเคชันด้วย React + Firebase (น. 125). บริษัท รีไวว่า จำกัด.
+จีราวุธ วารินทร์. (2566). คำนำ. ใน จีราวุธ วารินทร์ (บ.ก.), โมเดิร์น JavaScript เก่งได้ใน 30 วัน ฉบับ
+Node.js และ MongoDB (น. 3). บริษัท ธิงค์ บียอนด์ บุ๊คส์ จำกัด.
+จีราวุธ วารินทร์. (2566). รู้จักกับ Express. ใน จีราวุธ วารินทร์, โมเดิร์น JavaScript เก่งได้ใน 30 วัน
+ฉบับ Node.js และ MongoDB (น. 410). บริษัท ธิงค์ บียอนด์ บุ๊คส์ จำกัด.
+จีราวุธ วารินทร์. (2566). สร้างแอปพลิเตชันในฝั่ง Backend ด้วย Node.js. ใน จีราวุธ วารินทร์ (บ.ก.),
+โมเดิร์น JavaScript เก่งได้ใน 30 วัน ฉบับ Node.js และ MongoDB (น. 384). บริษัท ธิงค์ บียอนด์
+บุ๊คส์ จำกัด.
+เจษฎา แสงขาว. (2561, 16 พฤษภาคม). [Firebase] คืออะไร มาดูวิธีสร้าง Project และทำความรู้จัก
+กับ Firebase. Medium. https://medium.com/jed-ng/firebase-คืออะไร-มาดูวิธีสร้าง-
+project-และทำความรู้จักกับ-firebase-d48bfac67b14
+ชรินทร เรืองไลคราม. (2566, 29 กันยายน). Tailwind CSS เฟรมเวิร์กที่ช่วยให้ Dev ทำงานง่ายขึ้น.
+Morpshosis. https://morphos.is/th/blog/tailwind-css-a-framework-that-makes-
+dev-work-easier
+ซาฮิล ดาห์วัน. (2561, 13 พฤษภาคม). What’s new in CSS 3. Medium. https://medium.com/
+beginners-guide-to-mobile-web-development/whats-new-in-css-3-dcd7fa6122e1
+ดร. ศรีนิวาส จาการ์ลาปูดี. (2566, 29 มิถุนายน). NoSQL Databases: Empowering Modern Data
+Management. Linkedin. https://www.linkedin.com/pulse/nosql-databases-
+empowering-modern-data-management-jagarlapoodi
+
+
+--- PAGE 2 | บรรณานุกรม.pdf ---
+65
+บรรณานุกรม(ต่อ)
+ดาวิด คีลบาซา. (2566, 25 สิงหาคม). How Does Tailwind Work? Understanding Tailwind CSS
+and Why Everyone is Using it. Elpassion. https://www.elpassion.com/ blog/
+tailwind-css-how-does-it-work
+ทักษิณ น้อยบุดดี และ รัฐกรณ์ ศรีจันทร์. (2567). ระบบจองสนามกีฬาออนไลน์ กรณีศึกษาคณะ
+วิทยาการสารสนเทศ มหาวิทยาลัยมหาสารคาม. คณะวิทยาการสารสนเทศ มหาวิทยาลัยมหาสารคาม.
+ทีเจ โฮโลเวย์ชุก. (2553). Express.js Framework. expressjs. https://expressjs.com
+เบน มัสสัน. (2568, 11 มิถุนายน). Chart.js Library. Chart.js. Mussonindustrial.
+https://docs.mussonindustrial.com/ignition/embr-charts/components/chart-js/
+ประพิมพ์ภัทร นิ่มประเสริฐ. (2567, 13 พฤษภาคม). ทำความรู้จักกับ React และการใช้งานเบื้องต้น.
+Borntodev. https://www.borntodev.com/2024/05/13/ทำความรู้จักกับ-react/
+ปาร์ธ ปาเทล. (2559, 29 สิงหาคม). 14 Key Benefits of Using Firebase for Web and App
+Development. Cmarix. https://www.cmarix.com/blog/14-key-benefits-of-using-
+firebase-for-web-and-app-development/
+ปิติ โง้วธนสุวรรณ และคณะ. (2568). โปรแกรมบริหารจัดการจองห้องแบบบูรณาการ
+มหาวิทยาลัยขอนแก่น. วิทยาลัยการคอมพิวเตอร์ มหาวิทยาลัยขอนแก่น.
+มัตเตโอ ดูโอ. (2567, 1 สิงหาคม). The Beginner’s Guide to Responsive Web Design (Code
+Samples & Layout Examples). Kinsta. https://kinsta.com/blog/responsive-web-design/
+โมเซอร์เปอร์. (2564, 2 ตุลาคม). มาลองใช้ Cloud Firestore ด้วยกันนะ (สำหรับมือใหม่ — อ่านจบ
+Code ได้!!!). Medium. https://medium.com/foxbith/มาลองใช้-cloud-firestore-ด้วยกัน
+นะ-สำหรับมือใหม่-อ่านจบ-code-ได-้ e3cbd2cbeba8
+ศุภนิดา รุ่งคูหา และ บัญชา วัฒนะ. (2568). ระบบการจัดการการเบิกจ่ายวัตถุดิบสำหรับการผลิต
+กรณีศึกษา โรงงานผลิตชิ้นส่วนยานยนต์. คณะวิศวกรรมศาสตร์ มหาวิทยาลัยีมหาสารคาม.
+อิซารัป เอ็กซินโคล. (2567, 24 ธันวาคม). การสร้าง Dashboard โดยใช้ Chart.js ใน Next.js: จาก
+โปรแกรมสำเร็จรูปสู่การพัฒนาเว็บไซต์. BDI Big Data Institute. https://bdi.or.th/big-
+data-101/dashboard-by-chart-js
+เอมิลี่ ทานากะ-เดลกาโด. (2554, 11 กรกฎาคม). Evolving the Node.js Brand. Nodejs.
+https://nodejs.org/en/blog/uncategorized/evolving-the-node-js-brand
+โอภาส เอียมสิริวงศ์. (2551). ระบบฐานข้อมูล (Database System).ระบบฐานข้อมูล Database
+System (น. 35). บริษัท ซีเอ็ดยูเคชัน จำกัด.
+
+
+--- PAGE 3 | บรรณานุกรม.pdf ---
+66
+บรรณานุกรม(ต่อ)
+1001click. (2565, 7 เมษายน). RESPONSIVE WEB DESIGN | ออกแบบเว็บอย่างไร ให้รองรับได้ทุก
+DEVICE. https://www.1001click.com/blog/responsive-web-design
+TechTarget. (2567, 15 พฤศจิกายน). What is a Waterfall model? Definition and guide.
+https://www-techtarget-com.translate.goog/searchsoftwarequality
+/definition/waterfall-model?_x_tr_sl=en&_x_tr_tl=th&_x_tr_hl=th&_x_tr_pto=tc
+True Digital Academy. (2566, 26 มกราคม). รู้จัก 'Figma' Tool ออกแบบ Web/App ที่ดีไซน์เนอร์
+ทั่วโลกเลือกใช้. https://www.truedigitalacademy.com/blog/get-to-know-figma
+Visperhost. (2567, 26 สิงหาคม). CSS คืออะไร? ความหมายและประโยชน์ของ CSS ในการพัฒนา
+เว็บไซต์. https://www.visperhost.net/what-is-css/
+Webdodee. (2567, 2 กรกฎาคม). Visual Studio Code หรือ VS Code คืออะไร ทำอะไรได้บ้าง.
+https://webdodee.com/what-is-visual-studio-code-and-how-to-use/

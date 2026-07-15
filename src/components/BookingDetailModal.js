@@ -242,13 +242,18 @@ function BookingDetailModal({
     setIsEditMode(false);
   };
 
+  const isMaintenanceView = focusedCellInfo.status === 'maintenance';
+  const modalTitle = isMaintenanceView
+    ? `เลนที่ ${focusedCellInfo.laneNumber}`
+    : `เลนที่ ${focusedCellInfo.laneNumber} รอบ ${focusedCellInfo.slot}`;
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-start sm:items-center justify-center z-50 p-3 sm:p-4 animate-fadeIn overflow-y-auto">
       <div className="w-full max-w-sm bg-[#f8faf8] rounded-3xl sm:rounded-[2.5rem] border-[3px] border-emerald-700/25 overflow-hidden shadow-2xl text-slate-800 text-left">
         
-        {/* ส่วนหัวแสดงเลนซ้อมและเวลา */}
+        {/* ส่วนหัวแสดงเลนซ้อม */}
         <div className="bg-gradient-to-r from-[#064e3b] via-emerald-700 to-emerald-600 py-4 text-center border-b-2 border-emerald-900/10">
-          <h3 className="text-lg font-extrabold text-white">เลนที่ {focusedCellInfo.laneNumber} รอบ {focusedCellInfo.slot}</h3>
+          <h3 className="text-lg font-extrabold text-white">{modalTitle}</h3>
         </div>
         
         {/* บล็อกเนื้อหา */}
@@ -391,7 +396,7 @@ function BookingDetailModal({
             </div>
           ) : (
             <div className="bg-red-50 text-red-800 p-4 rounded-xl text-center font-bold text-sm border border-red-200">
-              เลนซ้อมช่วงเวลานี้ปิดปรับปรุงระบบ
+              เลนซ้อมนี้ปิดปรับปรุงระบบ
             </div>
           )}
 

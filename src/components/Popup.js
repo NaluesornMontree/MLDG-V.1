@@ -6,12 +6,19 @@ import { AlertIcon, CheckCircleIcon } from './AppIcons';
 function Popup({ isOpen, type = 'info', title, message, onConfirm, onCancel }) {
   if (!isOpen) return null;
   const s = theme.modal;
+  const isDanger = type === 'danger' || type === 'error';
+  const isWarning = type === 'warning';
+  const iconClass = isDanger
+    ? 'bg-red-50 text-red-500'
+    : isWarning
+      ? 'bg-amber-50 text-amber-600'
+      : 'bg-emerald-50 text-emerald-600';
 
   const popupContent = (
     <div className={`${s.overlay} modal-overlay-transition`}>
       <div className={`${s.card} modal-card-transition`}>
-        <div className={`${s.iconWrapper} ${type === 'danger' ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>
-          {type === 'danger' ? (
+        <div className={`${s.iconWrapper} ${iconClass}`}>
+          {isDanger || isWarning ? (
             <AlertIcon className="h-7 w-7" />
           ) : (
             <CheckCircleIcon className="h-7 w-7" />
