@@ -589,7 +589,7 @@ function OwnerRevenueOverview({
   const averageDivisor = range === 'year' ? 12 : range === '7days' ? 7 : 1;
   const isCustomSingleDay = range === 'custom' && report.dayCount === 1;
   const isDailyBars = range === '7days' || (range === 'custom' && report.dayCount > 1 && report.dayCount <= 7);
-  const isDonut = range === 'today' || range === 'month' || isCustomSingleDay;
+  const isDonut = range === 'today' || range === 'month' || range === 'custom' || isCustomSingleDay;
   const donutTotal = report.cashTotal + report.transferTotal;
   const cashPercent = donutTotal ? (report.cashTotal / donutTotal) * 100 : 0;
   const chartData = range === 'year' ? report.monthly : isDailyBars ? report.daily : report.weekly;
