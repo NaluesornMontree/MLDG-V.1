@@ -1180,32 +1180,34 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
       </div>
 
       {/* เธเธฅเนเธญเธเธชเธฃเธธเธ: เนเธชเธ”เธเธชเธ–เธดเธ•เธดเธเธณเธเธงเธเนเธเธเธญเธ */}
-      <div className="bg-slate-100 p-4 sm:p-5 rounded-2xl mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-slate-200 shadow-3xs">
-        <div>
-          <p className="text-xl font-black text-slate-700">สรุปข้อมูลลูกค้าหน้าร้าน</p>
-          <p className="text-xs text-indigo-600 font-black mt-0.5">ประจำวันที่: {new Date(selectedDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+      {!publicView && (
+        <div className="bg-slate-100 p-4 sm:p-5 rounded-2xl mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-slate-200 shadow-3xs">
+          <div>
+            <p className="text-xl font-black text-slate-700">สรุปข้อมูลลูกค้าหน้าร้าน</p>
+            <p className="text-xs text-indigo-600 font-black mt-0.5">ประจำวันที่: {new Date(selectedDate).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+          </div>
+          <div className="flex flex-col lg:flex-row flex-wrap gap-3 sm:gap-4 font-bold text-sm w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 bg-white text-slate-700 border px-4 sm:px-5 py-3 rounded-2xl shadow-xs">
+              <span className="text-xs uppercase tracking-wider font-extrabold text-slate-400">จองคิวออนไลน์ทั้งหมด</span>
+              <span className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-xl text-base font-black">
+                {loading ? "..." : (getBookingCountByStatus('pending') + getBookingCountByStatus('confirmed'))} รายการ
+              </span>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 bg-white text-slate-700 border px-4 sm:px-5 py-3 rounded-2xl shadow-xs">
+              <span className="text-xs uppercase tracking-wider font-extrabold text-slate-400">กำลังใช้งานหน้าร้านตอนนี้</span>
+              <span className="bg-amber-50 text-amber-700 px-3 py-1 rounded-xl text-base font-black">
+                {loading ? "..." : getBookingCountByStatus('occupied')} รายการ
+              </span>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 bg-white text-slate-700 border px-4 sm:px-5 py-3 rounded-2xl shadow-xs">
+              <span className="text-xs uppercase tracking-wider font-extrabold text-slate-400">เลนปิดปรับปรุง</span>
+              <span className="bg-rose-50 text-rose-700 px-3 py-1 rounded-xl text-base font-black">
+                {loading ? "..." : maintenanceLaneCount} เลน
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-col lg:flex-row flex-wrap gap-3 sm:gap-4 font-bold text-sm w-full sm:w-auto">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 bg-white text-slate-700 border px-4 sm:px-5 py-3 rounded-2xl shadow-xs">
-            <span className="text-xs uppercase tracking-wider font-extrabold text-slate-400">จองคิวออนไลน์ทั้งหมด</span>
-            <span className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-xl text-base font-black">
-              {loading ? "..." : (getBookingCountByStatus('pending') + getBookingCountByStatus('confirmed'))} รายการ
-            </span>
-          </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 bg-white text-slate-700 border px-4 sm:px-5 py-3 rounded-2xl shadow-xs">
-            <span className="text-xs uppercase tracking-wider font-extrabold text-slate-400">กำลังใช้งานหน้าร้านตอนนี้</span>
-            <span className="bg-amber-50 text-amber-700 px-3 py-1 rounded-xl text-base font-black">
-              {loading ? "..." : getBookingCountByStatus('occupied')} รายการ
-            </span>
-          </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 bg-white text-slate-700 border px-4 sm:px-5 py-3 rounded-2xl shadow-xs">
-            <span className="text-xs uppercase tracking-wider font-extrabold text-slate-400">เลนปิดปรับปรุง</span>
-            <span className="bg-rose-50 text-rose-700 px-3 py-1 rounded-xl text-base font-black">
-              {loading ? "..." : maintenanceLaneCount} เลน
-            </span>
-          </div>
-        </div>
-      </div>
+      )}
 
       {loading ? (
         <div className="text-center py-20 font-black text-slate-400 tracking-widest animate-pulse">กำลังจัดระเบียบตารางพิกัดเวลา...</div>
@@ -1430,13 +1432,6 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
                 <input type="text" inputMode="numeric" pattern="[0-9]*" value={walkInGuests} onChange={(e) => setWalkInGuests(normalizeWholeNumberInput(e.target.value))} className="w-full bg-slate-100 p-3 rounded-xl text-sm font-bold focus:outline-none" />
               </div>
               <div>
-                <p className="text-sm font-bold text-slate-700 mb-1">ต้องการผู้สอนพื้นฐานการเล่นกอล์ฟหรือไม่?</p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <button onClick={() => setWalkInInstructor(true)} className={`flex-1 py-2 text-xs font-black rounded-lg border transition-all ${walkInInstructor ? 'bg-emerald-100 border-emerald-400 text-emerald-800' : 'bg-white'}`}>ต้องการ</button>
-                  <button onClick={() => setWalkInInstructor(false)} className={`flex-1 py-2 text-xs font-black rounded-lg border transition-all ${!walkInInstructor ? 'bg-rose-100 border-rose-300 text-rose-800' : 'bg-white'}`}>ไม่ต้องการ</button>
-                </div>
-              </div>
-              <div>
                 <p className="text-sm font-bold text-slate-700 mb-1">ต้องการเช่าไม้กอล์ฟหรือไม่?</p>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <button
@@ -1457,6 +1452,13 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
                     เลือกไม้กอล์ฟไว้แล้ว {walkInSelectedClubs.reduce((sum, item) => sum + Number(item.qty || 0), 0)} ชิ้น
                   </div>
                 )}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-700 mb-1">ต้องการผู้สอนพื้นฐานการเล่นกอล์ฟหรือไม่?</p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button onClick={() => setWalkInInstructor(true)} className={`flex-1 py-2 text-xs font-black rounded-lg border transition-all ${walkInInstructor ? 'bg-emerald-100 border-emerald-400 text-emerald-800' : 'bg-white'}`}>ต้องการ</button>
+                  <button onClick={() => setWalkInInstructor(false)} className={`flex-1 py-2 text-xs font-black rounded-lg border transition-all ${!walkInInstructor ? 'bg-rose-100 border-rose-300 text-rose-800' : 'bg-white'}`}>ไม่ต้องการ</button>
+                </div>
               </div>
             </div>
             <div className="flex flex-col sm:flex-row gap-3 pt-6">

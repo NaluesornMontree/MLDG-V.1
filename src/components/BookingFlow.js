@@ -740,24 +740,6 @@ const BookingFlow = ({ user, userData }) => {
 
                         <div className="space-y-4 pt-2">
                             <div>
-                                <p className="text-base font-bold text-slate-800 mb-1">ต้องการผู้สอนพื้นฐานการเล่นกอล์ฟหรือไม่?</p>
-                                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                                    <button 
-                                        onClick={() => setBookingData({ ...bookingData, needsInstructor: true })}
-                                        className={`px-6 py-2 rounded-xl text-sm font-bold flex items-center gap-1.5 border transition-all ${bookingData.needsInstructor ? 'bg-emerald-50 border-emerald-200 text-emerald-800 shadow-sm' : 'bg-white text-slate-400 border-slate-200'}`}
-                                    >
-                                        <input type="radio" checked={bookingData.needsInstructor === true} readOnly /> ต้องการ
-                                    </button>
-                                    <button 
-                                        onClick={() => setBookingData({ ...bookingData, needsInstructor: false })}
-                                        className={`px-6 py-2 rounded-xl text-sm font-bold flex items-center gap-1.5 border transition-all ${!bookingData.needsInstructor ? 'bg-slate-100 border-slate-200 text-slate-700 shadow-sm' : 'bg-white text-slate-400 border-slate-200'}`}
-                                    >
-                                        <input type="radio" checked={bookingData.needsInstructor === false} readOnly /> ไม่ต้องการ
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div>
                                 <p className="text-base font-bold text-slate-800 mb-1">ต้องการเช่าไม้กอล์ฟหรือไม่?</p>
                                 <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                                     <button 
@@ -771,6 +753,24 @@ const BookingFlow = ({ user, userData }) => {
                                         className={`px-6 py-2 rounded-xl text-sm font-bold flex items-center gap-1.5 border transition-all ${!bookingData.needsClubRent ? 'bg-slate-100 border-slate-200 text-slate-700 shadow-sm' : 'bg-white text-slate-400 border-slate-200'}`}
                                     >
                                         <input type="radio" checked={bookingData.needsClubRent === false} readOnly /> ไม่ต้องการ
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <p className="text-base font-bold text-slate-800 mb-1">ต้องการผู้สอนพื้นฐานการเล่นกอล์ฟหรือไม่?</p>
+                                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                                    <button 
+                                        onClick={() => setBookingData({ ...bookingData, needsInstructor: true })}
+                                        className={`px-6 py-2 rounded-xl text-sm font-bold flex items-center gap-1.5 border transition-all ${bookingData.needsInstructor ? 'bg-emerald-50 border-emerald-200 text-emerald-800 shadow-sm' : 'bg-white text-slate-400 border-slate-200'}`}
+                                    >
+                                        <input type="radio" checked={bookingData.needsInstructor === true} readOnly /> ต้องการ
+                                    </button>
+                                    <button 
+                                        onClick={() => setBookingData({ ...bookingData, needsInstructor: false })}
+                                        className={`px-6 py-2 rounded-xl text-sm font-bold flex items-center gap-1.5 border transition-all ${!bookingData.needsInstructor ? 'bg-slate-100 border-slate-200 text-slate-700 shadow-sm' : 'bg-white text-slate-400 border-slate-200'}`}
+                                    >
+                                        <input type="radio" checked={bookingData.needsInstructor === false} readOnly /> ไม่ต้องการ
                                     </button>
                                 </div>
                             </div>

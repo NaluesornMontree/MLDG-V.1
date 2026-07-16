@@ -38,7 +38,7 @@ function Auth() {
           const userData = userDoc.data();
           const isActive = userData.Is_Active ?? userData.isActive ?? true;
           if (isActive === false) {
-            alert("บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อเจ้าของร้าน");
+            window.appAlert("บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อเจ้าของร้าน");
             await auth.signOut();
             setLoading(false);
             return;
@@ -47,7 +47,7 @@ function Auth() {
       } else if (mode === 'register') {
         const normalizedPhone = normalizePhoneNumber(phoneNumber);
         if (normalizedPhone.length !== 10) {
-          alert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
+          window.appAlert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
           return;
         }
 
@@ -56,7 +56,7 @@ function Auth() {
         const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone, userCred.user.uid);
         if (duplicatePhoneUser) {
           await deleteUser(userCred.user);
-          alert(getDuplicatePhoneMessage(normalizedPhone));
+          window.appAlert(getDuplicatePhoneMessage(normalizedPhone));
           return;
         }
         
@@ -73,14 +73,14 @@ function Auth() {
           CreatedAt: new Date()
         });
         
-        alert("ลงทะเบียนสำเร็จ ระบบได้ส่งลิงก์ยืนยันตัวตนไปที่อีเมลของท่านแล้ว กรุณาตรวจสอบในกล่องข้อความและกดยืนยันก่อนเข้าสู่ระบบ");
+        window.appAlert("ลงทะเบียนสำเร็จ ระบบได้ส่งลิงก์ยืนยันตัวตนไปที่อีเมลของท่านแล้ว กรุณาตรวจสอบในกล่องข้อความและกดยืนยันก่อนเข้าสู่ระบบ");
         setMode('login');
       }
     } catch (err) {
       const fallbackMessage = mode === 'login'
         ? 'ไม่สามารถเข้าสู่ระบบได้ กรุณาตรวจสอบอีเมลและรหัสผ่านแล้วลองอีกครั้ง'
         : 'ไม่สามารถสมัครสมาชิกได้ กรุณาตรวจสอบข้อมูลแล้วลองอีกครั้ง';
-      alert(getFirebaseAuthErrorMessage(err, fallbackMessage));
+      window.appAlert(getFirebaseAuthErrorMessage(err, fallbackMessage));
     } finally {
       setLoading(false);
     }
@@ -108,12 +108,12 @@ function Auth() {
         const userData = userDoc.data();
         const isActive = userData.Is_Active ?? userData.isActive ?? true;
         if (isActive === false) {
-          alert("บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อเจ้าของร้าน");
+          window.appAlert("บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อเจ้าของร้าน");
           await auth.signOut();
         }
       }
     } catch (err) {
-      alert(`การเข้าสู่ระบบด้วย Google ไม่สำเร็จ: ${getFirebaseAuthErrorMessage(err, 'กรุณาลองเข้าสู่ระบบด้วย Google อีกครั้ง')}`);
+      window.appAlert(`การเข้าสู่ระบบด้วย Google ไม่สำเร็จ: ${getFirebaseAuthErrorMessage(err, 'กรุณาลองเข้าสู่ระบบด้วย Google อีกครั้ง')}`);
     } finally {
       setLoading(false);
     }
@@ -143,12 +143,12 @@ function Auth() {
         const userData = userDoc.data();
         const isActive = userData.Is_Active ?? userData.isActive ?? true;
         if (isActive === false) {
-          alert("บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อเจ้าของร้าน");
+          window.appAlert("บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อเจ้าของร้าน");
           await auth.signOut();
         }
       }
     } catch (err) {
-      alert(`การเข้าสู่ระบบด้วย Facebook ไม่สำเร็จ: ${getFirebaseAuthErrorMessage(err, 'กรุณาลองเข้าสู่ระบบด้วย Facebook อีกครั้ง')}`);
+      window.appAlert(`การเข้าสู่ระบบด้วย Facebook ไม่สำเร็จ: ${getFirebaseAuthErrorMessage(err, 'กรุณาลองเข้าสู่ระบบด้วย Facebook อีกครั้ง')}`);
     } finally {
       setLoading(false);
     }
@@ -158,10 +158,10 @@ function Auth() {
     e.preventDefault();
     try {
       await sendPasswordResetEmail(auth, email);
-      alert("ส่งลิงก์รีเซ็ตรหัสผ่านไปที่อีเมลแล้ว");
+      window.appAlert("ส่งลิงก์รีเซ็ตรหัสผ่านไปที่อีเมลแล้ว");
       setMode('login');
     } catch (err) {
-      alert(`ไม่สามารถส่งอีเมลรีเซ็ตรหัสผ่านได้: ${getFirebaseAuthErrorMessage(err, 'กรุณาตรวจสอบอีเมลแล้วลองอีกครั้ง')}`);
+      window.appAlert(`ไม่สามารถส่งอีเมลรีเซ็ตรหัสผ่านได้: ${getFirebaseAuthErrorMessage(err, 'กรุณาตรวจสอบอีเมลแล้วลองอีกครั้ง')}`);
     }
   };
 

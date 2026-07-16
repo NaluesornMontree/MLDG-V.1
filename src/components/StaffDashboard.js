@@ -26,15 +26,15 @@ function StaffDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
-    if (!profileForm.FullName.trim()) return alert("กรุณากรอกชื่อ-นามสกุลจริง");
+    if (!profileForm.FullName.trim()) return window.appAlert("กรุณากรอกชื่อ-นามสกุลจริง");
     const normalizedPhone = normalizePhoneNumber(profileForm.PhoneNumber);
-    if (normalizedPhone.length !== 10) return alert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
+    if (normalizedPhone.length !== 10) return window.appAlert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
 
     setUpdatingProfile(true);
     try {
       const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone, user.uid);
       if (duplicatePhoneUser) {
-        alert(getDuplicatePhoneMessage(normalizedPhone));
+        window.appAlert(getDuplicatePhoneMessage(normalizedPhone));
         return;
       }
 
@@ -42,9 +42,9 @@ function StaffDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
         FullName: profileForm.FullName.trim(),
         PhoneNumber: normalizedPhone
       });
-      alert("บันทึกการแก้ไขข้อมูลส่วนตัวสำเร็จ");
+      window.appAlert("บันทึกการแก้ไขข้อมูลส่วนตัวสำเร็จ");
     } catch (error) {
-      alert("เกิดข้อผิดพลาด: " + error.message);
+      window.appAlert("เกิดข้อผิดพลาด: " + error.message);
     } finally {
       setUpdatingProfile(false);
     }
@@ -61,25 +61,24 @@ function StaffDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans">
       {/* Sidebar */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 overflow-hidden bg-emerald-950 text-white p-2 shadow-2xl border-t border-emerald-800/70 md:inset-y-0 md:right-auto md:h-dvh md:w-72 md:shrink-0 md:overflow-y-auto md:p-6 md:border-t-0 md:flex md:flex-col md:justify-between">
-        <img
-          src="/sidebar-cover.jpg"
-          alt=""
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-45"
-          onError={(event) => {
-            event.currentTarget.onerror = null;
-            event.currentTarget.src = '/shop-hero.jpg';
-          }}
-        />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-emerald-950/95 via-emerald-950/82 to-emerald-950/96" />
+      <div
+        className="fixed bottom-0 left-0 right-0 z-50 overflow-hidden bg-emerald-950 text-white p-2 shadow-2xl border-t border-emerald-800/70 md:inset-y-0 md:right-auto md:h-dvh md:w-72 md:shrink-0 md:overflow-y-auto md:p-6 md:border-t-0 md:flex md:flex-col md:justify-between"
+        style={{
+          backgroundImage: "linear-gradient(to bottom, rgba(2,44,34,0.88), rgba(2,44,34,0.72), rgba(2,44,34,0.84)), url('/sidebar-cover.jpg')",
+          backgroundSize: '100% 100%',
+          backgroundPosition: 'top center',
+          backgroundRepeat: 'no-repeat',
+          backgroundAttachment: 'local'
+        }}
+      >
         <div className="relative z-10">
-          <h2 className="hidden md:block text-xl font-black mb-6 tracking-tighter">MLG STAFF</h2>
+          <h2 className="hidden md:flex mb-5 rounded-2xl border border-cyan-300/30 bg-cyan-600/25 px-4 py-3 text-lg font-black tracking-wide text-white shadow-sm shadow-cyan-950/20">
+            MLG Staff
+          </h2>
           <div className="hidden md:block mb-6 p-4 bg-emerald-950/40 rounded-2xl border border-emerald-800/50">
             <div className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">ผู้เข้าใช้งาน</div>
             <div className="text-sm font-black truncate mt-1">{userData?.FullName || 'พนักงาน'}</div>
             <div className="text-[10px] text-slate-400 truncate">{user?.email}</div>
-            <span className="inline-block mt-2 bg-amber-600 text-white text-[9px] font-black px-2 py-0.5 rounded uppercase">STAFF</span>
           </div>
 
           <nav className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-1 md:pb-0">
@@ -156,8 +155,6 @@ function StaffDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
             setProfileForm={setProfileForm}
             updatingProfile={updatingProfile}
             onSubmit={handleUpdateProfile}
-            roleLabel="STAFF"
-            roleClassName="bg-amber-600"
             fallbackName="พนักงาน"
             fallbackInitials="ST"
             onPasswordResetEmailSent={onPasswordResetEmailSent}

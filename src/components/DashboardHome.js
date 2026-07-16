@@ -33,6 +33,19 @@ const getPaymentAmount = (payment) => {
   return getNumericPaymentField(payment, ['Total_Amount', 'totalAmount']) || 0;
 };
 
+const getPaymentBreakdown = (payment) => {
+  const cash = getNumericPaymentField(payment, ['Cash_Amount', 'cashAmount']) || 0;
+  const transfer = getNumericPaymentField(payment, ['Transfer_Amount', 'transferAmount']) || 0;
+  if (cash + transfer > 0) return { cash, transfer, total: cash + transfer };
+  const total = getPaymentAmount(payment);
+  const method = String(payment?.Payment_Method || payment?.paymentMethod || '').toLowerCase();
+  return {
+    cash: method.includes('cash') || method.includes('สด') ? total : 0,
+    transfer: method.includes('transfer') || method.includes('โอน') ? total : 0,
+    total
+  };
+};
+
 const MONTH_LABELS_TH = [
   'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
@@ -43,6 +56,8 @@ const buildRevenueReport = (payments = [], year = new Date().getFullYear()) => {
     label,
     month: index,
     total: 0,
+    cash: 0,
+    transfer: 0,
     count: 0
   }));
 
@@ -51,11 +66,16 @@ const buildRevenueReport = (payments = [], year = new Date().getFullYear()) => {
     if (!paymentDate || paymentDate.getFullYear() !== year || payment.status === 'cancelled') return;
 
     const monthIndex = paymentDate.getMonth();
-    monthly[monthIndex].total += getPaymentAmount(payment);
+    const breakdown = getPaymentBreakdown(payment);
+    monthly[monthIndex].total += breakdown.total;
+    monthly[monthIndex].cash += breakdown.cash;
+    monthly[monthIndex].transfer += breakdown.transfer;
     monthly[monthIndex].count += 1;
   });
 
   const yearTotal = monthly.reduce((sum, month) => sum + month.total, 0);
+  const cashTotal = monthly.reduce((sum, month) => sum + month.cash, 0);
+  const transferTotal = monthly.reduce((sum, month) => sum + month.transfer, 0);
   const bestMonth = monthly.reduce((best, month) => (
     month.total > best.total ? month : best
   ), monthly[0]);
@@ -64,6 +84,8 @@ const buildRevenueReport = (payments = [], year = new Date().getFullYear()) => {
     year,
     monthly,
     yearTotal,
+    cashTotal,
+    transferTotal,
     bestMonth,
     averageMonthly: yearTotal / 12
   };
@@ -80,6 +102,80 @@ const getBookingCreatedDate = (booking) => (
 const getPaymentDate = (payment) => (
   toDate(payment.Payment_Date || payment.createdAt || payment.Created_At || payment.updatedAt)
 );
+
+const getReportRange = (
+  range,
+  month = new Date().getMonth(),
+  year = new Date().getFullYear(),
+  customStart,
+  customEnd
+) => {
+  const today = new Date();
+  const end = range === 'custom' && customEnd
+    ? new Date(`${customEnd}T23:59:59.999`)
+    : range === 'month'
+    ? new Date(year, month + 1, 0, 23, 59, 59, 999)
+    : range === 'year'
+      ? new Date(year, 11, 31, 23, 59, 59, 999)
+      : new Date(today);
+  const start = range === 'custom' && customStart
+    ? new Date(`${customStart}T00:00:00`)
+    : range === 'month'
+    ? new Date(year, month, 1, 0, 0, 0, 0)
+    : range === 'year'
+      ? new Date(year, 0, 1, 0, 0, 0, 0)
+      : new Date(end);
+  if (range === 'today') {
+    start.setHours(0, 0, 0, 0);
+  } else if (range === '7days') {
+    start.setDate(start.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
+  }
+  return { start, end };
+};
+
+const buildFilteredRevenueReport = (payments = [], range = 'year', month, year, customStart, customEnd) => {
+  const { start, end } = getReportRange(range, month, year, customStart, customEnd);
+  const filteredPayments = payments.filter((payment) => {
+    const date = getPaymentDate(payment);
+    return date && date >= start && date <= end;
+  });
+  const daily = [];
+  const cursor = new Date(start);
+  cursor.setHours(0, 0, 0, 0);
+  const lastDay = new Date(end);
+  lastDay.setHours(0, 0, 0, 0);
+  while (cursor <= lastDay && daily.length < 366) {
+    const dayKey = cursor.toISOString().split('T')[0];
+    const dayPayments = filteredPayments.filter((payment) => getPaymentDate(payment)?.toISOString().split('T')[0] === dayKey);
+    const totals = dayPayments.reduce((summary, payment) => {
+      const breakdown = getPaymentBreakdown(payment);
+      return {
+        cash: summary.cash + breakdown.cash,
+        transfer: summary.transfer + breakdown.transfer,
+        total: summary.total + breakdown.total
+      };
+    }, { cash: 0, transfer: 0, total: 0 });
+    daily.push({
+      key: dayKey,
+      label: cursor.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }),
+      ...totals
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  const weekly = [];
+  for (let index = 0; index < daily.length; index += 7) {
+    const days = daily.slice(index, index + 7);
+    weekly.push(days.reduce((summary, day) => ({
+      key: days[0].key,
+      label: days.length > 1 ? `${days[0].label} - ${days[days.length - 1].label}` : days[0].label,
+      cash: summary.cash + day.cash,
+      transfer: summary.transfer + day.transfer,
+      total: summary.total + day.total
+    }), { cash: 0, transfer: 0, total: 0 }));
+  }
+  return { ...buildRevenueReport(filteredPayments, end.getFullYear()), daily, weekly, dayCount: daily.length };
+};
 
 const getReviewDate = (review) => (
   toDate(review.createdAt || review.Review_Date || review.reviewDate || review.updatedAt)
@@ -294,14 +390,14 @@ function DashboardSummaryPanel({ selected, stats, sortMode, onSortModeChange }) 
       }))
     },
     pendingBookings: {
-      title: 'ข้อมูลสรุปรายการรอตรวจสอบ',
-      empty: 'ไม่มีรายการที่รอตรวจสอบ',
+      title: 'ข้อมูลสรุปรายการรอเช็กอิน',
+      empty: 'ไม่มีรายการที่รอเช็กอิน',
       sortable: true,
       allowUpcomingSort: true,
       rows: stats.pendingBookingList.map((booking) => ({
         title: getBookingCustomer(booking),
         meta: `${booking.bookingDate || '-'} | ${getBookingLane(booking)} | ${getBookingTime(booking)}`,
-        value: 'รอตรวจสอบ',
+        value: 'รอเช็กอิน',
         tone: 'blue',
         createdAt: getBookingCreatedDate(booking),
         startAt: getBookingStartDate(booking),
@@ -465,55 +561,185 @@ function DashboardSummaryPanel({ selected, stats, sortMode, onSortModeChange }) 
   );
 }
 
-function OwnerRevenueOverview({ report }) {
+function OwnerRevenueOverview({
+  report,
+  range = 'year',
+  month,
+  year,
+  customStart,
+  customEnd,
+  onRangeChange,
+  onMonthChange,
+  onYearChange,
+  onCustomStartChange,
+  onCustomEndChange
+}) {
   if (!report) return null;
 
-  const maxTotal = Math.max(...report.monthly.map((month) => month.total), 1);
+  const rangeLabel = range === 'today'
+      ? 'วันนี้'
+      : range === '7days'
+        ? 'ย้อนหลัง 7 วัน'
+        : range === 'custom'
+          ? customStart && customEnd ? `${customStart} ถึง ${customEnd}` : 'กำหนดช่วงเวลาเอง'
+        : range === 'month'
+        ? `รายเดือน ${MONTH_LABELS_TH[month]} ${year + 543}`
+        : `รายปี ${year + 543}`;
+  const averageLabel = range === 'year' ? 'เฉลี่ยต่อเดือน' : 'เฉลี่ยต่อวัน';
+  const averageDivisor = range === 'year' ? 12 : range === '7days' ? 7 : 1;
+  const isCustomSingleDay = range === 'custom' && report.dayCount === 1;
+  const isDailyBars = range === '7days' || (range === 'custom' && report.dayCount > 1 && report.dayCount <= 7);
+  const isDonut = range === 'today' || range === 'month' || isCustomSingleDay;
+  const donutTotal = report.cashTotal + report.transferTotal;
+  const cashPercent = donutTotal ? (report.cashTotal / donutTotal) * 100 : 0;
+  const chartData = range === 'year' ? report.monthly : isDailyBars ? report.daily : report.weekly;
+  const maxChartTotal = Math.max(...chartData.map((item) => Math.max(item.cash, item.transfer)), 1);
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-600">OWNER REVENUE</div>
-          <h3 className="mt-1 text-lg font-black text-slate-900">กราฟรายได้ประจำปี {report.year + 543}</h3>
+          <h3 className="mt-1 text-lg font-black text-slate-900">กราฟรายได้{rangeLabel}</h3>
           <p className="mt-1 text-xs font-bold text-slate-400">สรุปรายได้จากรายการชำระเงินที่ปิดยอดแล้ว และไม่รวมรายการที่ถูกยกเลิกบิล</p>
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="flex flex-col items-end gap-3 lg:ml-auto">
+          <div className="flex flex-wrap justify-end gap-2">
+            <select
+              value={range}
+              onChange={(event) => onRangeChange?.(event.target.value)}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-700 shadow-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50"
+              aria-label="ช่วงเวลารายงานรายได้"
+            >
+              <option value="today">วันนี้</option>
+              <option value="7days">ย้อนหลัง 7 วัน</option>
+              <option value="month">รายเดือน</option>
+              <option value="year">รายปี</option>
+              <option value="custom">กำหนดช่วงเวลาเอง</option>
+            </select>
+            {range === 'custom' && (
+              <>
+                <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black text-slate-500">
+                  ตั้งแต่
+                  <input
+                    type="date"
+                    value={customStart}
+                    max={customEnd}
+                    onChange={(event) => onCustomStartChange?.(event.target.value)}
+                    className="min-w-0 bg-transparent text-xs font-black text-slate-700 outline-none"
+                    aria-label="วันที่เริ่มต้นรายงาน"
+                  />
+                </label>
+                <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black text-slate-500">
+                  ถึง
+                  <input
+                    type="date"
+                    value={customEnd}
+                    min={customStart}
+                    onChange={(event) => onCustomEndChange?.(event.target.value)}
+                    className="min-w-0 bg-transparent text-xs font-black text-slate-700 outline-none"
+                    aria-label="วันที่สิ้นสุดรายงาน"
+                  />
+                </label>
+              </>
+            )}
+            {(range === 'month' || range === 'year') && (
+              <div className="flex flex-wrap justify-end gap-2">
+              {range === 'month' && (
+                <select
+                  value={month}
+                  onChange={(event) => onMonthChange?.(Number(event.target.value))}
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50"
+                  aria-label="เลือกเดือนรายงาน"
+                >
+                  {MONTH_LABELS_TH.map((label, index) => (
+                    <option key={label} value={index}>{label}</option>
+                  ))}
+                </select>
+              )}
+              <select
+                value={year}
+                onChange={(event) => onYearChange?.(Number(event.target.value))}
+                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50"
+                aria-label="เลือกปีรายงาน"
+              >
+                {Array.from({ length: 6 }, (_, index) => new Date().getFullYear() - index).map((optionYear) => (
+                  <option key={optionYear} value={optionYear}>{optionYear + 543}</option>
+                ))}
+              </select>
+            </div>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
-            <div className="text-[10px] font-black text-emerald-700">รายได้ทั้งปี</div>
+            <div className="text-[10px] font-black text-emerald-700">รายได้รวมช่วงที่เลือก</div>
             <div className="mt-1 text-lg font-black text-emerald-900">{report.yearTotal.toLocaleString()} บาท</div>
           </div>
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
+            <div className="text-[10px] font-black text-blue-700">เงินสด</div>
+            <div className="mt-1 text-lg font-black text-blue-900">{report.cashTotal.toLocaleString()} บาท</div>
+          </div>
+          <div className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3">
+            <div className="text-[10px] font-black text-violet-700">เงินโอน</div>
+            <div className="mt-1 text-lg font-black text-violet-900">{report.transferTotal.toLocaleString()} บาท</div>
+          </div>
           <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-            <div className="text-[10px] font-black text-slate-500">เฉลี่ยต่อเดือน</div>
-            <div className="mt-1 text-lg font-black text-slate-800">{Math.round(report.averageMonthly).toLocaleString()} บาท</div>
+            <div className="text-[10px] font-black text-slate-500">{averageLabel}</div>
+            <div className="mt-1 text-lg font-black text-slate-800">{Math.round(report.yearTotal / averageDivisor).toLocaleString()} บาท</div>
           </div>
           <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
             <div className="text-[10px] font-black text-amber-700">เดือนสูงสุด</div>
             <div className="mt-1 text-lg font-black text-amber-900">{report.bestMonth.label} {report.bestMonth.total.toLocaleString()} บาท</div>
           </div>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-12 items-end gap-2 rounded-3xl border border-slate-100 bg-slate-50 px-3 pb-4 pt-6 sm:gap-3 sm:px-5">
-        {report.monthly.map((month) => {
-          const height = Math.max(8, Math.round((month.total / maxTotal) * 150));
-          return (
-            <div key={month.label} className="flex min-w-0 flex-col items-center gap-2">
-              <div className="flex h-40 w-full items-end justify-center">
+      {isDonut ? (
+        <div className="flex flex-col items-center justify-center gap-5 rounded-3xl border border-slate-100 bg-slate-50 px-5 py-8 sm:flex-row sm:gap-10">
+          <div
+            className="relative flex h-48 w-48 shrink-0 items-center justify-center rounded-full"
+            style={{ background: `conic-gradient(#60a5fa 0 ${cashPercent}%, #a78bfa ${cashPercent}% 100%)` }}
+          >
+            <div className="flex h-32 w-32 flex-col items-center justify-center rounded-full bg-white text-center shadow-inner">
+              <span className="text-[11px] font-black text-slate-400">ยอดรวม</span>
+              <span className="mt-1 text-xl font-black text-slate-900">{report.yearTotal.toLocaleString()}</span>
+              <span className="text-[11px] font-bold text-slate-400">บาท</span>
+            </div>
+          </div>
+          <div className="grid w-full max-w-sm gap-3">
+            <div className="flex items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
+              <span className="flex items-center gap-2 text-sm font-black text-blue-800"><span className="h-3 w-3 rounded-full bg-blue-400" />เงินสด</span>
+              <span className="text-sm font-black text-blue-900">{report.cashTotal.toLocaleString()} บาท</span>
+            </div>
+            <div className="flex items-center justify-between rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3">
+              <span className="flex items-center gap-2 text-sm font-black text-violet-800"><span className="h-3 w-3 rounded-full bg-violet-400" />เงินโอน</span>
+              <span className="text-sm font-black text-violet-900">{report.transferTotal.toLocaleString()} บาท</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className={`grid items-end gap-2 overflow-x-auto rounded-3xl border border-slate-100 bg-slate-50 px-3 pb-4 pt-6 sm:gap-3 sm:px-5 ${range === 'year' ? 'grid-cols-12' : 'grid-cols-7'}`}>
+          {chartData.map((item) => (
+            <div key={item.key || item.label} className="flex min-w-0 flex-col items-center gap-2">
+              <div className="flex h-40 w-full items-end justify-center gap-1">
                 <div
-                  className="w-full max-w-8 rounded-t-xl border border-emerald-200 bg-emerald-500/70 transition-all"
-                  style={{ height: `${height}px` }}
-                  title={`${month.label}: ${month.total.toLocaleString()} บาท`}
+                  className="w-full max-w-4 rounded-t-lg border border-blue-200 bg-blue-400/80 transition-all"
+                  style={{ height: `${Math.max(item.cash ? 8 : 0, Math.round((item.cash / maxChartTotal) * 150))}px` }}
+                  title={`${item.label} เงินสด: ${item.cash.toLocaleString()} บาท`}
+                />
+                <div
+                  className="w-full max-w-4 rounded-t-lg border border-violet-200 bg-violet-400/80 transition-all"
+                  style={{ height: `${Math.max(item.transfer ? 8 : 0, Math.round((item.transfer / maxChartTotal) * 150))}px` }}
+                  title={`${item.label} เงินโอน: ${item.transfer.toLocaleString()} บาท`}
                 />
               </div>
-              <div className="text-[10px] font-black text-slate-500">{month.label}</div>
-              <div className="text-[10px] font-bold leading-tight text-slate-500">
-                {month.total ? month.total.toLocaleString() : '-'}
-              </div>
+              <div className="text-center text-[10px] font-black text-slate-500">{item.label}</div>
+              <div className="text-[10px] font-bold leading-tight text-slate-500">{item.total ? item.total.toLocaleString() : '-'}</div>
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -522,11 +748,18 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [selectedSummary, setSelectedSummary] = useState('');
   const [summarySortMode, setSummarySortMode] = useState('newest');
+  const [reportRange, setReportRange] = useState('year');
+  const [reportMonth, setReportMonth] = useState(new Date().getMonth());
+  const [reportYear, setReportYear] = useState(new Date().getFullYear());
+  const [customReportStart, setCustomReportStart] = useState(todayKey());
+  const [customReportEnd, setCustomReportEnd] = useState(todayKey());
   const [stats, setStats] = useState({
     bookingsToday: 0,
     activeLanes: 0,
     pendingBookings: 0,
     revenueToday: 0,
+    cashRevenueToday: 0,
+    transferRevenueToday: 0,
     shopRating: 0,
     reviewCount: 0,
     bookingsTodayList: [],
@@ -542,7 +775,8 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
     upcomingBookings: 0,
     completedBookings: 0,
     latestBooking: null,
-    revenueReport: buildRevenueReport([])
+    revenueReport: buildRevenueReport([]),
+    revenuePayments: []
   });
 
   const displayName = userData?.FullName || userData?.fullName || user?.displayName || 'ผู้ใช้งาน';
@@ -587,6 +821,8 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
             activeLanes: bookings.filter((booking) => booking.status === 'occupied').length,
             pendingBookings: bookings.filter((booking) => booking.status === 'pending').length,
             revenueToday: 0,
+            cashRevenueToday: 0,
+            transferRevenueToday: 0,
             shopRating: 0,
             reviewCount: pendingReviewBookings.length,
             bookingsTodayList: bookings.filter((booking) => booking.bookingDate === todayKey()),
@@ -602,7 +838,8 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
             upcomingBookings: upcoming.length,
             completedBookings: bookings.filter((booking) => booking.status === 'completed').length,
             latestBooking: latest,
-            revenueReport: buildRevenueReport([])
+            revenueReport: buildRevenueReport([]),
+            revenuePayments: []
           });
           return;
         }
@@ -631,11 +868,22 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
           return payment.status !== 'cancelled' && paymentDate && paymentDate.toISOString().split('T')[0] === today;
         });
 
+        const todayBreakdown = paymentsTodayList.reduce((summary, payment) => {
+          const breakdown = getPaymentBreakdown(payment);
+          return {
+            cash: summary.cash + breakdown.cash,
+            transfer: summary.transfer + breakdown.transfer,
+            total: summary.total + breakdown.total
+          };
+        }, { cash: 0, transfer: 0, total: 0 });
+
         setStats({
           bookingsToday: bookingsTodayList.length,
           activeLanes: activeLaneList.length,
           pendingBookings: pendingBookingList.length,
-          revenueToday: paymentsTodayList.reduce((sum, payment) => sum + getPaymentAmount(payment), 0),
+          revenueToday: todayBreakdown.total,
+          cashRevenueToday: todayBreakdown.cash,
+          transferRevenueToday: todayBreakdown.transfer,
           shopRating: ratingAverage,
           reviewCount: ratingValues.length,
           bookingsTodayList,
@@ -651,7 +899,8 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
           upcomingBookings: 0,
           completedBookings: bookings.filter((booking) => booking.status === 'completed').length,
           latestBooking: null,
-          revenueReport: buildRevenueReport(payments)
+          revenueReport: buildRevenueReport(payments),
+          revenuePayments: payments
         });
       } catch (error) {
         console.error('Error loading dashboard:', error);
@@ -701,7 +950,7 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
     },
     {
       key: 'pendingBookings',
-      label: 'รอตรวจสอบ',
+      label: 'รายการรอเช็กอิน',
       value: stats.pendingBookings,
       hint: 'กดเพื่อดูรายการ',
       tone: 'blue',
@@ -719,7 +968,7 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
       key: 'revenueToday',
       label: 'ยอดรับชำระวันนี้',
       value: `${stats.revenueToday.toLocaleString()} บาท`,
-      hint: 'กดเพื่อดูยอด',
+      hint: `สด ${stats.cashRevenueToday.toLocaleString()} | โอน ${stats.transferRevenueToday.toLocaleString()} บาท`,
       tone: 'slate',
       icon: 'payment'
     },
@@ -752,7 +1001,7 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
     },
     {
       key: 'pendingBookings',
-      label: 'รอตรวจสอบ',
+      label: 'รายการรอเช็กอิน',
       value: stats.pendingBookings,
       hint: 'รายการที่รอเจ้าหน้าที่ดูแล',
       tone: 'blue',
@@ -800,7 +1049,7 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
               <>
                 <StatCard label="แต้มสะสม" value={formatPoints(userData?.Points_Balance ?? userData?.points_balance ?? 0)} hint="คะแนนที่ใช้แลกส่วนลดได้" tone="amber" icon="star" />
                 <StatCard label="การจองที่กำลังมาถึง" value={stats.upcomingBookings} hint="รายการที่ยังใช้งานได้" tone="emerald" icon="booking" />
-                <StatCard label="รอตรวจสอบ" value={stats.pendingBookings} hint="รายการที่รอเจ้าหน้าที่ดูแล" tone="blue" icon="history" />
+                <StatCard label="รายการรอเช็กอิน" value={stats.pendingBookings} hint="รายการจองที่ยังไม่มาเช็กอิน" tone="blue" icon="history" />
                 <StatCard label="ใช้บริการเสร็จสิ้น" value={stats.completedBookings} hint="ประวัติการใช้บริการทั้งหมด" tone="slate" icon="payment" />
               </>
             ) : (
@@ -841,7 +1090,28 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
                 sortMode={summarySortMode}
                 onSortModeChange={setSummarySortMode}
               />
-              {isOwner && <OwnerRevenueOverview report={stats.revenueReport} />}
+              {isOwner && (
+                <OwnerRevenueOverview
+                  report={buildFilteredRevenueReport(
+                    stats.revenuePayments,
+                    reportRange,
+                    reportMonth,
+                    reportYear,
+                    customReportStart,
+                    customReportEnd
+                  )}
+                  range={reportRange}
+                  month={reportMonth}
+                  year={reportYear}
+                  customStart={customReportStart}
+                  customEnd={customReportEnd}
+                  onRangeChange={setReportRange}
+                  onMonthChange={setReportMonth}
+                  onYearChange={setReportYear}
+                  onCustomStartChange={setCustomReportStart}
+                  onCustomEndChange={setCustomReportEnd}
+                />
+              )}
             </>
           ) : (
             <>

@@ -43,20 +43,20 @@ function StaffManagement() {
 
   const handleAddStaff = async () => {
     if (!newStaff.FullName || !newStaff.Email || !newStaff.Password) {
-      alert("กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน");
+      window.appAlert("กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน");
       return;
     }
 
     try {
       const normalizedPhone = normalizePhoneNumber(newStaff.PhoneNumber);
       if (normalizedPhone.length !== 10) {
-        alert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
+        window.appAlert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
         return;
       }
 
       const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone);
       if (duplicatePhoneUser) {
-        alert(getDuplicatePhoneMessage(normalizedPhone));
+        window.appAlert(getDuplicatePhoneMessage(normalizedPhone));
         return;
       }
 
@@ -82,28 +82,28 @@ function StaffManagement() {
       setNewStaff({ FullName: '', Email: '', PhoneNumber: '', Password: '', Role: 'staff' });
       setIsAddModalOpen(false);
       fetchStaff();
-      alert("เพิ่มสมาชิกในทีมและสร้างบัญชีเข้าใช้งานเรียบร้อยแล้ว");
+      window.appAlert("เพิ่มสมาชิกในทีมและสร้างบัญชีเข้าใช้งานเรียบร้อยแล้ว");
     } catch (err) {
-      alert("เกิดข้อผิดพลาดในการสร้างบัญชี: " + err.message);
+      window.appAlert("เกิดข้อผิดพลาดในการสร้างบัญชี: " + err.message);
     }
   };
 
   const handleUpdate = async () => {
     if (!editData.FullName || !editData.Email) {
-      alert("กรุณากรอกชื่อและอีเมลให้ครบถ้วน");
+      window.appAlert("กรุณากรอกชื่อและอีเมลให้ครบถ้วน");
       return;
     }
     
     try {
       const normalizedPhone = normalizePhoneNumber(editData.PhoneNumber);
       if (normalizedPhone.length !== 10) {
-        alert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
+        window.appAlert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
         return;
       }
 
       const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone, editingId);
       if (duplicatePhoneUser) {
-        alert(getDuplicatePhoneMessage(normalizedPhone));
+        window.appAlert(getDuplicatePhoneMessage(normalizedPhone));
         return;
       }
 
@@ -117,10 +117,10 @@ function StaffManagement() {
       setIsEditModalOpen(false);
       setEditingId(null);
       fetchStaff();
-      alert("แก้ไขข้อมูลสมาชิกในทีมสำเร็จ");
+      window.appAlert("แก้ไขข้อมูลสมาชิกในทีมสำเร็จ");
     } catch (error) {
       console.error("Error updating team member:", error);
-      alert("ไม่สามารถอัปเดตข้อมูลได้");
+      window.appAlert("ไม่สามารถอัปเดตข้อมูลได้");
     }
   };
 
@@ -131,7 +131,7 @@ function StaffManagement() {
       fetchStaff();
     } catch (error) {
       console.error("Error toggling status:", error);
-      alert("เกิดข้อผิดพลาดในการเปลี่ยนสถานะบัญชี");
+      window.appAlert("เกิดข้อผิดพลาดในการเปลี่ยนสถานะบัญชี");
     }
   };
 

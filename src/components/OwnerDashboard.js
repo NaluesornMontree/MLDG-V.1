@@ -37,12 +37,12 @@ function OwnerDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     if (!profileForm.FullName.trim()) {
-      alert("กรุณากรอกชื่อ-นามสกุลจริง");
+      window.appAlert("กรุณากรอกชื่อ-นามสกุลจริง");
       return;
     }
     const normalizedPhone = normalizePhoneNumber(profileForm.PhoneNumber);
     if (normalizedPhone.length !== 10) {
-      alert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
+      window.appAlert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
       return;
     }
 
@@ -50,7 +50,7 @@ function OwnerDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
     try {
       const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone, user.uid);
       if (duplicatePhoneUser) {
-        alert(getDuplicatePhoneMessage(normalizedPhone));
+        window.appAlert(getDuplicatePhoneMessage(normalizedPhone));
         return;
       }
 
@@ -58,9 +58,9 @@ function OwnerDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
         FullName: profileForm.FullName.trim(),
         PhoneNumber: normalizedPhone
       });
-      alert("บันทึกการแก้ไขข้อมูลส่วนตัวสำเร็จเรียบร้อยแล้ว");
+      window.appAlert("บันทึกการแก้ไขข้อมูลส่วนตัวสำเร็จเรียบร้อยแล้ว");
     } catch (error) {
-      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล: " + error.message);
+      window.appAlert("เกิดข้อผิดพลาดในการบันทึกข้อมูล: " + error.message);
     } finally {
       setUpdatingProfile(false);
     }
@@ -83,20 +83,20 @@ function OwnerDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans">
       {/* --- SIDEBAR --- */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 overflow-hidden bg-emerald-950 text-white p-2 shadow-2xl border-t border-emerald-800/70 md:inset-y-0 md:right-auto md:h-dvh md:w-72 md:shrink-0 md:overflow-y-auto md:p-6 md:border-t-0 md:flex md:flex-col md:justify-between">
-        <img
-          src="/sidebar-cover.jpg"
-          alt=""
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-45"
-          onError={(event) => {
-            event.currentTarget.onerror = null;
-            event.currentTarget.src = '/shop-hero.jpg';
-          }}
-        />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-emerald-950/95 via-emerald-950/82 to-emerald-950/96" />
+      <div
+        className="fixed bottom-0 left-0 right-0 z-50 overflow-hidden bg-emerald-950 text-white p-2 shadow-2xl border-t border-emerald-800/70 md:inset-y-0 md:right-auto md:h-dvh md:w-72 md:shrink-0 md:overflow-y-auto md:p-6 md:border-t-0 md:flex md:flex-col md:justify-between"
+        style={{
+          backgroundImage: "linear-gradient(to bottom, rgba(2,44,34,0.88), rgba(2,44,34,0.72), rgba(2,44,34,0.84)), url('/sidebar-cover.jpg')",
+          backgroundSize: '100% 100%',
+          backgroundPosition: 'top center',
+          backgroundRepeat: 'no-repeat',
+          backgroundAttachment: 'local'
+        }}
+      >
         <div className="relative z-10">
-          <h2 className="hidden md:block text-xl font-black mb-4 tracking-tighter">MLG MANAGEMENT</h2>
+          <h2 className="hidden md:flex mb-5 rounded-2xl border border-blue-400/30 bg-blue-600/25 px-4 py-3 text-lg font-black tracking-wide text-white shadow-sm shadow-blue-950/20">
+            MLG Owner
+          </h2>
           
           <div className="hidden md:block mb-6 p-4 bg-emerald-950/40 rounded-2xl border border-emerald-800/50 text-left">
             <div className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">ผู้เข้าใช้งาน</div>
@@ -104,11 +104,6 @@ function OwnerDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
               {userData?.FullName || userData?.fullName || 'ไม่ระบุชื่อ'}
             </div>
             <div className="text-[10px] text-slate-400 font-bold truncate">{user?.email}</div>
-            <div className="mt-2.5">
-              <span className="inline-block text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider bg-blue-600">
-                OWNER
-              </span>
-            </div>
           </div>
 
           <nav className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-1 md:pb-0">
@@ -203,8 +198,6 @@ function OwnerDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
             setProfileForm={setProfileForm}
             updatingProfile={updatingProfile}
             onSubmit={handleUpdateProfile}
-            roleLabel="OWNER"
-            roleClassName="bg-blue-600"
             fallbackName="ผู้บริหารระบบ"
             fallbackInitials="US"
             onPasswordResetEmailSent={onPasswordResetEmailSent}

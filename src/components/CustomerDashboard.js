@@ -144,12 +144,12 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     if (!profileForm.FullName.trim()) {
-      alert('กรุณากรอกชื่อ-นามสกุลจริง');
+      window.appAlert('กรุณากรอกชื่อ-นามสกุลจริง');
       return;
     }
     const normalizedPhone = normalizePhoneNumber(profileForm.PhoneNumber);
     if (normalizedPhone.length !== 10) {
-      alert('กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก');
+      window.appAlert('กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก');
       return;
     }
 
@@ -157,7 +157,7 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
     try {
       const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone, user.uid);
       if (duplicatePhoneUser) {
-        alert(getDuplicatePhoneMessage(normalizedPhone));
+        window.appAlert(getDuplicatePhoneMessage(normalizedPhone));
         return;
       }
 
@@ -170,9 +170,9 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
         Is_Active: userData?.Is_Active ?? userData?.isActive ?? true,
         Updated_At: new Date()
       }, { merge: true });
-      alert('บันทึกการแก้ไขข้อมูลส่วนตัวสำเร็จเรียบร้อยแล้ว');
+      window.appAlert('บันทึกการแก้ไขข้อมูลส่วนตัวสำเร็จเรียบร้อยแล้ว');
     } catch (error) {
-      alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' + error.message);
+      window.appAlert('เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' + error.message);
     } finally {
       setUpdatingProfile(false);
     }
@@ -538,13 +538,13 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
   const handleSaveReceipt = () => {
     if (!receiptBooking) return;
     if (!receiptPayment || receiptPayment.status === 'cancelled') {
-      alert('ยังไม่สามารถบันทึกใบเสร็จได้ เนื่องจากรายการนี้ยังไม่ได้รับการชำระเงิน');
+      window.appAlert('ยังไม่สามารถบันทึกใบเสร็จได้ เนื่องจากรายการนี้ยังไม่ได้รับการชำระเงิน');
       return;
     }
 
     const receiptWindow = window.open('', '_blank', 'width=900,height=900');
     if (!receiptWindow) {
-      alert('ไม่สามารถเปิดหน้าบันทึกใบเสร็จได้ กรุณาอนุญาต popup ในเบราว์เซอร์');
+      window.appAlert('ไม่สามารถเปิดหน้าบันทึกใบเสร็จได้ กรุณาอนุญาต popup ในเบราว์เซอร์');
       return;
     }
 
@@ -754,7 +754,7 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
     const newQty = Math.max(0, currentQty + change);
 
     if (newQty > club.available) {
-      alert(`ไม้กอล์ฟรายการนี้พร้อมใช้งานได้อีก ${club.available} ชิ้น`);
+      window.appAlert(`ไม้กอล์ฟรายการนี้พร้อมใช้งานได้อีก ${club.available} ชิ้น`);
       return;
     }
 
@@ -787,11 +787,11 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
     if (!editingBooking || !canModifyBooking(editingBooking)) return;
     const phone = editBookingForm.customerPhone.replace(/\D/g, '');
     if (!editBookingForm.customerName.trim() || phone.length !== 10) {
-      alert('กรุณากรอกชื่อและเบอร์โทรศัพท์ 10 หลักให้ครบถ้วน');
+      window.appAlert('กรุณากรอกชื่อและเบอร์โทรศัพท์ 10 หลักให้ครบถ้วน');
       return;
     }
     if (editBookingForm.needsClubRent && editSelectedClubs.length === 0) {
-      alert('กรุณาเลือกไม้กอล์ฟอย่างน้อย 1 รายการ หรือเปลี่ยนเป็นไม่ต้องการเช่า');
+      window.appAlert('กรุณาเลือกไม้กอล์ฟอย่างน้อย 1 รายการ หรือเปลี่ยนเป็นไม่ต้องการเช่า');
       return;
     }
 
@@ -827,23 +827,23 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
   const handleSubmitReview = async (e) => {
     e.preventDefault();
     if (!selectedReviewBooking) {
-      alert('กรุณาเลือกประวัติการใช้บริการที่เสร็จสิ้นแล้วก่อนให้คะแนน');
+      window.appAlert('กรุณาเลือกประวัติการใช้บริการที่เสร็จสิ้นแล้วก่อนให้คะแนน');
       return;
     }
     if (selectedReviewBooking.status !== 'completed') {
-      alert('ให้คะแนนได้เฉพาะการใช้บริการที่เสร็จสิ้นแล้วเท่านั้น');
+      window.appAlert('ให้คะแนนได้เฉพาะการใช้บริการที่เสร็จสิ้นแล้วเท่านั้น');
       return;
     }
 
     const selectedPayment = reviewPaymentMap[selectedReviewBooking.id] || paymentsByBookingId[selectedReviewBooking.id];
     if (selectedPayment?.status === 'cancelled') {
-      alert('รายการนี้ถูกยกเลิกบิลแล้ว จึงไม่สามารถให้คะแนนและความคิดเห็นได้');
+      window.appAlert('รายการนี้ถูกยกเลิกบิลแล้ว จึงไม่สามารถให้คะแนนและความคิดเห็นได้');
       return;
     }
 
     const existingSelectedReview = reviewMap[selectedReviewBooking.id];
     if (isReviewDeletedByShop(existingSelectedReview)) {
-      alert('ความคิดเห็นนี้ถูกลบโดยร้านแล้ว จึงไม่สามารถแก้ไขหรือนำมานับรวมกับคะแนนของร้านได้');
+      window.appAlert('ความคิดเห็นนี้ถูกลบโดยร้านแล้ว จึงไม่สามารถแก้ไขหรือนำมานับรวมกับคะแนนของร้านได้');
       return;
     }
     setSubmittingReview(true);
@@ -879,13 +879,13 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
         setPaymentReviewPrompt(null);
       }
 
-      alert(existingReview ? "แก้ไขคะแนนและความคิดเห็นเรียบร้อยแล้ว" : "ขอบคุณสำหรับคะแนนและความคิดเห็นที่มีให้ทางสนามครับ");
+      window.appAlert(existingReview ? "แก้ไขคะแนนและความคิดเห็นเรียบร้อยแล้ว" : "ขอบคุณสำหรับคะแนนและความคิดเห็นที่มีให้ทางสนามครับ");
       setReviewComment('');
       setReviewRating(5);
       setSelectedReviewBooking(null);
       fetchReviewableBookings();
     } catch (error) {
-      alert("ไม่สามารถส่งรีวิวได้: " + error.message);
+      window.appAlert("ไม่สามารถส่งรีวิวได้: " + error.message);
     }
     setSubmittingReview(false);
   };
@@ -926,20 +926,20 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans">
       {/* --- SIDEBAR (ถอดดีไซน์สีและ Layout มาจาก OwnerDashboard) --- */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 overflow-hidden bg-emerald-950 text-white p-2 shadow-2xl border-t border-emerald-800/70 md:inset-y-0 md:right-auto md:h-dvh md:w-72 md:shrink-0 md:overflow-y-auto md:p-6 md:border-t-0 md:flex md:flex-col md:justify-between">
-        <img
-          src="/sidebar-cover.jpg"
-          alt=""
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-45"
-          onError={(event) => {
-            event.currentTarget.onerror = null;
-            event.currentTarget.src = '/shop-hero.jpg';
-          }}
-        />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-emerald-950/95 via-emerald-950/82 to-emerald-950/96" />
+      <div
+        className="fixed bottom-0 left-0 right-0 z-50 overflow-hidden bg-emerald-950 text-white p-2 shadow-2xl border-t border-emerald-800/70 md:inset-y-0 md:right-auto md:h-dvh md:w-72 md:shrink-0 md:overflow-y-auto md:p-6 md:border-t-0 md:flex md:flex-col md:justify-between"
+        style={{
+          backgroundImage: "linear-gradient(to bottom, rgba(2,44,34,0.88), rgba(2,44,34,0.72), rgba(2,44,34,0.84)), url('/sidebar-cover.jpg')",
+          backgroundSize: '100% 100%',
+          backgroundPosition: 'top center',
+          backgroundRepeat: 'no-repeat',
+          backgroundAttachment: 'local'
+        }}
+      >
         <div className="relative z-10">
-          <h2 className="hidden md:block text-xl font-black mb-4 tracking-tighter">MLG MEMBER</h2>
+          <h2 className="hidden md:flex mb-5 rounded-2xl border border-amber-400/30 bg-amber-600/25 px-4 py-3 text-lg font-black tracking-wide text-white shadow-sm shadow-amber-950/20">
+            MLG Member
+          </h2>
           
           {/* บล็อกแสดงข้อมูลผู้เข้าใช้งานและแต้มสะสม */}
           <div className="hidden md:block mb-6 p-4 bg-emerald-950/40 rounded-2xl border border-emerald-800/50 text-left">
@@ -951,11 +951,6 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
             </div>
             <div className="text-[10px] text-slate-300 font-bold truncate mt-2">
               คุณ {userData?.FullName || userData?.fullName || 'สมาชิก'}
-            </div>
-            <div className="mt-2.5">
-              <span className="inline-block bg-amber-600 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
-                MEMBER
-              </span>
             </div>
           </div>
 
@@ -1048,8 +1043,6 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
             setProfileForm={setProfileForm}
             updatingProfile={updatingProfile}
             onSubmit={handleUpdateProfile}
-            roleLabel="MEMBER"
-            roleClassName="bg-amber-600"
             fallbackName="สมาชิก"
             fallbackInitials="MB"
             pointsBalance={userData?.Points_Balance ?? userData?.points_balance ?? 0}
@@ -1825,25 +1818,6 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-xs font-black text-slate-500">ต้องการผู้สอนพื้นฐานการเล่นกอล์ฟหรือไม่?</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditBookingForm({ ...editBookingForm, needsInstructor: true })}
-                      className={`rounded-xl border px-3 py-2 text-xs font-black ${editBookingForm.needsInstructor ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-400'}`}
-                    >
-                      ต้องการ
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditBookingForm({ ...editBookingForm, needsInstructor: false })}
-                      className={`rounded-xl border px-3 py-2 text-xs font-black ${!editBookingForm.needsInstructor ? 'border-slate-300 bg-slate-100 text-slate-700' : 'border-slate-200 bg-white text-slate-400'}`}
-                    >
-                      ไม่ต้องการ
-                    </button>
-                  </div>
-                </div>
-                <div>
                   <label className="mb-2 block text-xs font-black text-slate-500">ต้องการเช่าไม้กอล์ฟหรือไม่?</label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
@@ -1908,6 +1882,25 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
                       )}
                     </div>
                   )}
+                </div>
+                <div>
+                  <label className="mb-2 block text-xs font-black text-slate-500">ต้องการผู้สอนพื้นฐานการเล่นกอล์ฟหรือไม่?</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditBookingForm({ ...editBookingForm, needsInstructor: true })}
+                      className={`rounded-xl border px-3 py-2 text-xs font-black ${editBookingForm.needsInstructor ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-400'}`}
+                    >
+                      ต้องการ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditBookingForm({ ...editBookingForm, needsInstructor: false })}
+                      className={`rounded-xl border px-3 py-2 text-xs font-black ${!editBookingForm.needsInstructor ? 'border-slate-300 bg-slate-100 text-slate-700' : 'border-slate-200 bg-white text-slate-400'}`}
+                    >
+                      ไม่ต้องการ
+                    </button>
+                  </div>
                 </div>
               </div>
 

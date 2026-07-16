@@ -229,13 +229,13 @@ function BookingHistoryManagement() {
   const handleSaveReceipt = () => {
     if (!selectedBooking) return;
     if (!selectedBookingPayment || selectedBookingPayment.status === 'cancelled') {
-      alert('ยังไม่สามารถบันทึกใบเสร็จได้ เนื่องจากรายการนี้ยังไม่ได้รับการชำระเงิน');
+      window.appAlert('ยังไม่สามารถบันทึกใบเสร็จได้ เนื่องจากรายการนี้ยังไม่ได้รับการชำระเงิน');
       return;
     }
 
     const receiptWindow = window.open('', '_blank', 'width=900,height=900');
     if (!receiptWindow) {
-      alert('ไม่สามารถเปิดหน้าบันทึกใบเสร็จได้ กรุณาอนุญาต popup ในเบราว์เซอร์');
+      window.appAlert('ไม่สามารถเปิดหน้าบันทึกใบเสร็จได้ กรุณาอนุญาต popup ในเบราว์เซอร์');
       return;
     }
 

@@ -360,7 +360,7 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
         .filter(Boolean);
 
       if (itemsList.length === 0) {
-        alert('กรุณาเลือกรายการชำระเงินอย่างน้อย 1 รายการ');
+        window.appAlert('กรุณาเลือกรายการชำระเงินอย่างน้อย 1 รายการ');
         return;
       }
 
@@ -373,12 +373,12 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
         booking.needsClubRent &&
         selectedClubRentalItem.qty !== totalRentedClubQty
       ) {
-        alert('จำนวนค่าเช่าไม้กอล์ฟต้องตรงกับจำนวนไม้กอล์ฟที่เลือกไว้ตอนจอง');
+        window.appAlert('จำนวนค่าเช่าไม้กอล์ฟต้องตรงกับจำนวนไม้กอล์ฟที่เลือกไว้ตอนจอง');
         return;
       }
 
       if (paymentMethod === 'รวมทั้งสอง' && mixedPaymentTotal !== netAmount) {
-        alert('กรุณากรอกจำนวนเงินสดและเงินโอนให้รวมกันเท่ากับยอดชำระสุทธิ');
+        window.appAlert('กรุณากรอกจำนวนเงินสดและเงินโอนให้รวมกันเท่ากับยอดชำระสุทธิ');
         return;
       }
 
@@ -488,7 +488,7 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
       });
     } catch (error) {
       console.error('Error processing payment:', error);
-      alert(`เกิดข้อผิดพลาดในการรับชำระเงิน: ${error.message}`);
+      window.appAlert(`เกิดข้อผิดพลาดในการรับชำระเงิน: ${error.message}`);
     } finally {
       setIsProcessing(false);
     }
@@ -709,7 +709,40 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
                 <span className="font-mono">{totalAmount.toLocaleString()} บาท</span>
               </div>
 
-              <div className="flex flex-col justify-between gap-3 text-xs text-slate-400 sm:flex-row sm:items-center">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 shadow-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
+                      แต้มสะสมสมาชิกคงเหลือ
+                    </div>
+                    <div className="mt-0.5 flex items-end gap-1.5">
+                      <span className="font-mono text-2xl font-black text-emerald-700">
+                        {formatPoints(availableMemberPoints)}
+                      </span>
+                      <span className="pb-1 text-sm font-black text-amber-700">แต้ม</span>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
+                    <label className="mb-1 block text-[10px] font-black text-slate-600">
+                      ใช้แต้มเป็นส่วนลด
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={safeUsedPoints}
+                        max={Math.floor(availableMemberPoints)}
+                        onChange={(e) => setUsedPoints(normalizeWholeNumberInput(e.target.value))}
+                        className="w-20 rounded-lg border border-slate-200 bg-white py-1.5 text-center font-mono text-sm font-black text-slate-900 focus:border-emerald-500 focus:outline-none"
+                      />
+                      <span className="text-sm font-black text-slate-600">แต้ม</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="hidden">
                 <span>แต้มสะสมสมาชิกคงเหลือ: {formatPoints(availableMemberPoints)} แต้ม</span>
                 <div className="flex items-center space-x-2">
                   <span className="font-semibold text-slate-500">ส่วนลดแต้ม:</span>

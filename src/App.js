@@ -53,9 +53,7 @@ function BrowserAlertPopupBridge() {
   const [popupQueue, setPopupQueue] = useState([]);
 
   useEffect(() => {
-    const nativeAlert = window.alert;
-
-    window.alert = (message = '') => {
+    const enqueueAlert = (message = '') => {
       const text = String(message || '');
       const readableText = normalizeFirebaseErrorMessage(text);
       const type = getAlertType(`${text} ${readableText}`);
@@ -69,8 +67,13 @@ function BrowserAlertPopupBridge() {
         }
       ]);
     };
+    const nativeAlert = window.alert;
+
+    window.appAlert = enqueueAlert;
+    window.alert = enqueueAlert;
 
     return () => {
+      delete window.appAlert;
       window.alert = nativeAlert;
     };
   }, []);
@@ -89,7 +92,6 @@ function BrowserAlertPopupBridge() {
 }
 
 function PublicPortal({ onLoginRequest }) {
-  const [activePublicTab, setActivePublicTab] = useState('lanes');
   const [heroSlideIndex, setHeroSlideIndex] = useState(0);
 
   const heroSlides = [
@@ -117,22 +119,6 @@ function PublicPortal({ onLoginRequest }) {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
-      <header className="sticky top-0 z-40 border-b border-emerald-100 bg-white/95 shadow-sm backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-600">Muang Loei Drive Golf</p>
-            <h1 className="text-lg font-black text-slate-900 sm:text-xl">เมืองเลยไดร์ฟกอล์ฟ</h1>
-          </div>
-          <button
-            type="button"
-            onClick={onLoginRequest}
-            className="rounded-2xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white shadow-sm transition-all hover:bg-emerald-700 sm:px-5 sm:text-sm"
-          >
-            เข้าสู่ระบบ / สมัครสมาชิก
-          </button>
-        </div>
-      </header>
-
       <main>
         <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-10">
           <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-emerald-950 shadow-xl">
@@ -187,9 +173,18 @@ function PublicPortal({ onLoginRequest }) {
                   </div>
                 </div>
 
-                <div className="order-1">
-                  <div className="mb-3 inline-flex w-fit rounded-2xl border border-white/20 bg-white/15 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-50 backdrop-blur">
-                    Driving Range & Golf Practice
+                <div className="order-1 w-full">
+                  <div className="mb-3 flex w-full flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+                    <div className="inline-flex w-fit rounded-2xl border border-white/20 bg-white/15 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-50 backdrop-blur">
+                      Driving Range & Golf Practice
+                    </div>
+                    <button
+                      type="button"
+                      onClick={onLoginRequest}
+                      className="inline-flex w-fit rounded-2xl border border-white/20 bg-white/15 px-4 py-2 text-[11px] font-black text-white shadow-sm backdrop-blur transition-all hover:bg-white/25 sm:px-5 sm:text-xs"
+                    >
+                      เข้าสู่ระบบ / สมัครสมาชิก
+                    </button>
                   </div>
                   <h2 className="max-w-4xl font-black leading-tight text-white drop-shadow-sm">
                     <span className="block text-3xl sm:text-5xl lg:text-6xl">เมืองเลยไดร์ฟกอล์ฟ</span>
@@ -244,36 +239,10 @@ function PublicPortal({ onLoginRequest }) {
         </section>
 
         <section id="public-info" className="mx-auto max-w-7xl px-4 pb-10 sm:px-6">
-          <div className="mb-5 grid grid-cols-1 gap-2 rounded-3xl border border-slate-200 bg-white p-2 shadow-sm sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => setActivePublicTab('lanes')}
-              className={`rounded-2xl px-4 py-3 text-sm font-black transition-all ${
-                activePublicTab === 'lanes'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-500 hover:bg-slate-50'
-              }`}
-            >
-              ตารางการใช้เลนซ้อม
-            </button>
-            <button
-              type="button"
-              onClick={() => setActivePublicTab('reviews')}
-              className={`rounded-2xl px-4 py-3 text-sm font-black transition-all ${
-                activePublicTab === 'reviews'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-500 hover:bg-slate-50'
-              }`}
-            >
-              คะแนนและความคิดเห็น
-            </button>
-          </div>
-
-          {activePublicTab === 'lanes' ? (
-            <LaneManagement publicView onLoginRequest={onLoginRequest} />
-          ) : (
+          <LaneManagement publicView onLoginRequest={onLoginRequest} />
+          <div className="mt-6">
             <ReviewManagement publicView />
-          )}
+          </div>
         </section>
       </main>
     </div>
@@ -321,7 +290,7 @@ function AppContent() {
   }, []);
 
   const handleLogout = () => {
-    signOut(auth).then(() => alert("ออกจากระบบเรียบร้อยแล้ว"));
+    signOut(auth).then(() => window.appAlert("ออกจากระบบเรียบร้อยแล้ว"));
   };
 
   const handlePasswordResetEmailSent = async (email) => {
@@ -415,9 +384,9 @@ function AppContent() {
     setResendingVerification(true);
     try {
       await sendEmailVerification(auth.currentUser);
-      alert("ส่งอีเมลยืนยันอีกครั้งแล้ว กรุณาตรวจสอบกล่องจดหมายหลักและกล่องจดหมายขยะ");
+      window.appAlert("ส่งอีเมลยืนยันอีกครั้งแล้ว กรุณาตรวจสอบกล่องจดหมายหลักและกล่องจดหมายขยะ");
     } catch (error) {
-      alert("ไม่สามารถส่งอีเมลยืนยันซ้ำได้: " + error.message);
+      window.appAlert("ไม่สามารถส่งอีเมลยืนยันซ้ำได้: " + error.message);
     } finally {
       setResendingVerification(false);
     }

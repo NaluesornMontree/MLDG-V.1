@@ -391,13 +391,13 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
   const handleSavePayment = async () => {
     // ดักจับที่ 1: ตรวจสอบการกรอกชื่อลูกค้า
     if (!customerForm.customerName.trim()) {
-      alert("กรุณากรอกชื่อลูกค้าก่อนทำการบันทึกบิล");
+      window.appAlert("กรุณากรอกชื่อลูกค้าก่อนทำการบันทึกบิล");
       return;
     }
 
     // ดักจับที่ 2: บังคับให้พนักงานกดเลือกเวลาในตารางตารางหมากรุกอย่างน้อย 1 ช่อง (ตามเงื่อนไขใหม่)
     if (getSlotsCount() === 0) {
-      alert("ไม่สามารถบันทึกได้: กรุณาคลิกเลือกช่วงเวลาซ้อมบนตารางผังเลนฝั่งซ้ายอย่างน้อย 1 ช่องเวลา");
+      window.appAlert("ไม่สามารถบันทึกได้: กรุณาคลิกเลือกช่วงเวลาซ้อมบนตารางผังเลนฝั่งซ้ายอย่างน้อย 1 ช่องเวลา");
       return;
     }
 
@@ -419,18 +419,18 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
 
     // ดักจับที่ 3: บังคับให้พิมพ์ข้อมูลหมายเหตุเพิ่มชี้แจง (ตามเงื่อนไขใหม่)
     if (!customerForm.description.trim()) {
-      alert("ไม่สามารถบันทึกได้: กรุณากรอกช่องหมายเหตุชี้แจงเพิ่มเติม เพื่อระบุรายละเอียดหรือเหตุผลในบิลนี้");
+      window.appAlert("ไม่สามารถบันทึกได้: กรุณากรอกช่องหมายเหตุชี้แจงเพิ่มเติม เพื่อระบุรายละเอียดหรือเหตุผลในบิลนี้");
       return;
     }
 
     // ดักจับที่ 4: ตรวจสอบยอดรวมราคาสุทธิ
     if (totalAmount <= 0) {
-      alert("กรุณาเลือกรายการคิดเงินหรือปรับจำนวนสินค้าให้มียอดชำระมากกว่า 0 บาท");
+      window.appAlert("กรุณาเลือกรายการคิดเงินหรือปรับจำนวนสินค้าให้มียอดชำระมากกว่า 0 บาท");
       return;
     }
 
     if (customerForm.method === 'รวมทั้งสอง' && mixedPaymentTotal !== netAmount) {
-      alert('กรุณากรอกจำนวนเงินสดและเงินโอนให้รวมกันเท่ากับยอดชำระสุทธิ');
+      window.appAlert('กรุณากรอกจำนวนเงินสดและเงินโอนให้รวมกันเท่ากับยอดชำระสุทธิ');
       return;
     }
 
@@ -513,7 +513,7 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
         onConfirm: () => setAlert(p => ({ ...p, isOpen: false }))
       });
     } catch (err) { 
-      alert("เกิดข้อผิดพลาด: " + err.message); 
+      window.appAlert("เกิดข้อผิดพลาด: " + err.message);
     }
   };
 

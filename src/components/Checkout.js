@@ -57,10 +57,10 @@ function Checkout({ userId }) {
         totalPoints: increment(earnedPoints - safePointsToUse),
         lastUpdate: serverTimestamp()
       }, { merge: true });
-      alert(`ชำระเงินสำเร็จ!\nยอดสุทธิ: ฿${netTotal}\nได้รับแต้มใหม่: +${earnedPoints} แต้ม`);
+      window.appAlert(`ชำระเงินสำเร็จ!\nยอดสุทธิ: ฿${netTotal}\nได้รับแต้มใหม่: +${earnedPoints} แต้ม`);
       setUserPoints(prev => prev + (earnedPoints - safePointsToUse));
       setPointsToUse(0);
-    } catch (err) { alert(err.message); }
+    } catch (err) { window.appAlert(err.message); }
   };
 
   return (

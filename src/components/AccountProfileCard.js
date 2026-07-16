@@ -24,8 +24,6 @@ function AccountProfileCard({
   setProfileForm,
   updatingProfile,
   onSubmit,
-  roleLabel = 'USER',
-  roleClassName = 'bg-blue-600',
   fallbackName = 'ผู้ใช้งานระบบ',
   fallbackInitials = 'US',
   pointsBalance = null,
@@ -85,9 +83,6 @@ function AccountProfileCard({
           {user?.email}
         </p>
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-          <span className={`inline-block text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider ${roleClassName}`}>
-            {roleLabel}
-          </span>
           {pointsBalance !== null && (
             <span className="inline-block bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
               {formatPoints(pointsBalance)} PTS
