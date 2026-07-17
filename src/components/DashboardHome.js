@@ -590,6 +590,17 @@ function OwnerRevenueOverview({
   const isCustomSingleDay = range === 'custom' && report.dayCount === 1;
   const isDailyBars = range === '7days' || (range === 'custom' && report.dayCount > 1 && report.dayCount <= 7);
   const isDonut = range === 'today' || range === 'month' || range === 'custom' || isCustomSingleDay;
+  const showRangeTotal = range === 'custom';
+  const showAverage = range === 'custom' || range === '7days' || range === 'year';
+  const showBestMonth = range === 'year';
+  const visibleReportCards = 2 + Number(showRangeTotal) + Number(showAverage) + Number(showBestMonth);
+  const reportGridColumns = visibleReportCards === 5
+    ? 'xl:grid-cols-5'
+    : visibleReportCards === 4
+      ? 'xl:grid-cols-4'
+      : visibleReportCards === 3
+        ? 'xl:grid-cols-3'
+        : 'xl:grid-cols-2';
   const donutTotal = report.cashTotal + report.transferTotal;
   const cashPercent = donutTotal ? (report.cashTotal / donutTotal) * 100 : 0;
   const chartData = range === 'year' ? report.monthly : isDailyBars ? report.daily : report.weekly;
@@ -670,11 +681,13 @@ function OwnerRevenueOverview({
             </div>
             )}
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <div className={`grid grid-cols-1 gap-2 sm:grid-cols-2 ${reportGridColumns}`}>
+          {showRangeTotal && (
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
             <div className="text-[10px] font-black text-emerald-700">รายได้รวมช่วงที่เลือก</div>
             <div className="mt-1 text-lg font-black text-emerald-900">{report.yearTotal.toLocaleString()} บาท</div>
-          </div>
+           </div>
+          )}
           <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
             <div className="text-[10px] font-black text-blue-700">เงินสด</div>
             <div className="mt-1 text-lg font-black text-blue-900">{report.cashTotal.toLocaleString()} บาท</div>
@@ -682,15 +695,19 @@ function OwnerRevenueOverview({
           <div className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3">
             <div className="text-[10px] font-black text-violet-700">เงินโอน</div>
             <div className="mt-1 text-lg font-black text-violet-900">{report.transferTotal.toLocaleString()} บาท</div>
-          </div>
+           </div>
+          {showAverage && (
           <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
             <div className="text-[10px] font-black text-slate-500">{averageLabel}</div>
             <div className="mt-1 text-lg font-black text-slate-800">{Math.round(report.yearTotal / averageDivisor).toLocaleString()} บาท</div>
-          </div>
+           </div>
+          )}
+          {showBestMonth && (
           <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
             <div className="text-[10px] font-black text-amber-700">เดือนสูงสุด</div>
             <div className="mt-1 text-lg font-black text-amber-900">{report.bestMonth.label} {report.bestMonth.total.toLocaleString()} บาท</div>
-          </div>
+           </div>
+          )}
           </div>
         </div>
       </div>
