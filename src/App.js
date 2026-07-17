@@ -49,18 +49,29 @@ function getAlertTitle(type) {
   return 'แจ้งเตือนจากระบบ';
 }
 
+const dispatchAppAlert = (message = '') => {
+  if (typeof window === 'undefined') return;
+  const alertItem = { id: Date.now() + Math.random(), message };
+  window.__appAlertQueue = [...(window.__appAlertQueue || []), alertItem];
+  window.dispatchEvent(new CustomEvent('app-alert', { detail: alertItem }));
+};
+
+if (typeof window !== 'undefined') {
+  window.appAlert = dispatchAppAlert;
+}
+
 function BrowserAlertPopupBridge() {
   const [popupQueue, setPopupQueue] = useState([]);
 
   useEffect(() => {
-    const enqueueAlert = (message = '') => {
+    const enqueueAlert = ({ id, message = '' } = {}) => {
       const text = String(message || '');
       const readableText = normalizeFirebaseErrorMessage(text);
       const type = getAlertType(`${text} ${readableText}`);
       setPopupQueue((currentQueue) => [
         ...currentQueue,
         {
-          id: Date.now() + Math.random(),
+          id: id || Date.now() + Math.random(),
           type,
           title: getAlertTitle(type),
           message: readableText
@@ -68,17 +79,30 @@ function BrowserAlertPopupBridge() {
       ]);
     };
     const nativeAlert = window.alert;
+    const handleAppAlert = (event) => {
+      const alertItem = event.detail || {};
+      window.__appAlertQueue = (window.__appAlertQueue || []).filter((item) => item.id !== alertItem.id);
+      enqueueAlert(alertItem);
+    };
 
-    window.appAlert = enqueueAlert;
-    window.alert = enqueueAlert;
+    window.addEventListener('app-alert', handleAppAlert);
+    window.alert = dispatchAppAlert;
+    const pendingAlerts = window.__appAlertQueue || [];
+    window.__appAlertQueue = [];
+    pendingAlerts.forEach(enqueueAlert);
 
     return () => {
-      delete window.appAlert;
+      window.removeEventListener('app-alert', handleAppAlert);
       window.alert = nativeAlert;
     };
   }, []);
 
   const activePopup = popupQueue[0];
+  const dismissActivePopup = () => {
+    if (!activePopup) return;
+    window.__appAlertQueue = (window.__appAlertQueue || []).filter((item) => item.id !== activePopup.id);
+    setPopupQueue((currentQueue) => currentQueue.slice(1));
+  };
 
   return (
     <Popup
@@ -86,7 +110,7 @@ function BrowserAlertPopupBridge() {
       type={activePopup?.type}
       title={activePopup?.title}
       message={activePopup?.message}
-      onConfirm={() => setPopupQueue((currentQueue) => currentQueue.slice(1))}
+      onConfirm={dismissActivePopup}
     />
   );
 }
