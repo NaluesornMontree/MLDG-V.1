@@ -112,6 +112,12 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
           : booking.Lane_Code || booking.laneNumber || booking.laneCode || 'ไม่ระบุเลน'
   );
 
+  const getBookingLaneNumbers = (booking) => Array.from(new Set(
+    (String(getBookingLaneLabel(booking)).match(/\d+/g) || [])
+      .map(Number)
+      .filter(Number.isFinite)
+  )).sort((a, b) => a - b);
+
   const getBookingLaneSortValue = (booking) => getLaneSortNumber(
     booking.selectedLanes?.length ? booking.selectedLanes : (booking.Lane_Code || booking.laneNumber || booking.laneCode)
   );
@@ -199,6 +205,7 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
       checkoutLaneNumbers: Array.isArray(target.laneNumbers) ? target.laneNumbers : null,
       checkoutSlot: target.slot || null,
       checkoutSlots: Array.isArray(target.slots) ? target.slots : null,
+      checkoutDetailedSlots: target.checkoutDetailedSlots || null,
       checkoutEndTime: target.checkoutEndTime || null,
       releaseAllSlotsForLane: Boolean(target.releaseAllSlotsForLane),
       releaseAllSlotsForLanes: Boolean(target.releaseAllSlotsForLanes)
@@ -305,23 +312,74 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
 
       {/* ลิสต์เลนซ้อมที่กำลังใช้งาน */}
       <div className="mb-8">
-        <h3 className="font-bold text-gray-700 mb-4 text-sm text-left">เลนซ้อมที่เปิดบริการขณะนี้</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div className="text-left">
+            <h3 className="text-base font-extrabold text-slate-800">เลนซ้อมที่เปิดบริการขณะนี้</h3>
+            <p className="mt-1 text-xs font-semibold text-slate-400">เลือกรายการที่ต้องการเรียกคิดเงินและปิดยอดชำระ</p>
+          </div>
+          <span className="w-fit rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-extrabold text-emerald-700">
+            {sortedActiveLanes.length} รายการ
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
           {sortedActiveLanes.length === 0 ? (
             <div className="col-span-full bg-slate-50 p-10 rounded-2xl text-center text-gray-400 font-bold border border-dashed">ไม่มีเลนสนามที่เปิดใช้งานอยู่ ณ ขณะนี้</div>
           ) : (
-            sortedActiveLanes.map((booking) => (
-              <div key={booking.id} className="bg-white rounded-2xl shadow-sm p-4 border border-slate-200 flex flex-col items-center">
-                <div className="w-24 h-20 bg-slate-100 rounded-xl mb-2 border flex flex-col items-center justify-center p-2 text-center">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase">ชื่อลูกค้า</p>
-                  <p className="text-xs text-emerald-700 font-black truncate max-w-full">{booking.customerName || 'ไม่ระบุชื่อ'}</p>
+            sortedActiveLanes.map((booking) => {
+              const laneNumbers = getBookingLaneNumbers(booking);
+
+              return (
+                <div
+                  key={booking.id}
+                  className="flex h-full min-h-[13.5rem] flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"
+                >
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-emerald-700">
+                      <NavIcon name="user" className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-bold uppercase text-slate-400">ชื่อลูกค้า</p>
+                      <p className="mt-0.5 break-words text-sm font-extrabold leading-snug text-slate-800">
+                        {booking.customerName || 'ไม่ระบุชื่อ'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="my-3.5 h-px bg-slate-100" />
+
+                  <div className="flex-1">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-bold text-slate-500">หมายเลขเลนซ้อม</p>
+                      {laneNumbers.length > 0 && (
+                        <span className="text-[11px] font-extrabold text-slate-400">{laneNumbers.length} เลน</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {laneNumbers.length > 0 ? laneNumbers.map((lane) => (
+                        <span
+                          key={lane}
+                          className="inline-flex min-w-12 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-sm font-extrabold text-emerald-800"
+                        >
+                          เลน {lane}
+                        </span>
+                      )) : (
+                        <span className="text-sm font-bold text-slate-500">{getBookingLaneLabel(booking)}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedBooking(booking); setIsModalOpen(true); }}
+                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-extrabold text-white shadow-sm transition-all hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                  >
+                    <NavIcon name="payment" className="h-4 w-4" />
+                    <span>เรียกคิดเงินชำระบิล</span>
+                  </button>
                 </div>
-                <span className="text-sm font-black mb-1">เลนซ้อม: {getBookingLaneLabel(booking)}</span>
-                <button onClick={() => { setSelectedBooking(booking); setIsModalOpen(true); }} className="w-full mt-2 py-2 rounded-xl font-black bg-emerald-600 hover:bg-emerald-700 text-white text-sm shadow-sm transition-all">
-                  เรียกคิดเงินชำระบิล
-                </button>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

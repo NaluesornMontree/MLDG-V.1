@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase'; 
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { SaveIcon } from './AppIcons';
+import IntegerStepperInput from './IntegerStepperInput';
 import Popup from './Popup';
 import {
   getClubName,
@@ -12,7 +13,7 @@ import {
   getClubType,
   sortGolfClubsLikeInventory
 } from '../utils/golfClubUtils';
-import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
+import { toWholeNumber } from '../utils/numberUtils';
 
 function BookingDetailModal({ 
   isOpen, 
@@ -199,7 +200,7 @@ function BookingDetailModal({
       setSelectedClubs([...selectedClubs, { 
         clubId: club.id, 
         Club_Name: club.name, 
-        qty: 1, 
+        qty: newQty,
         price: club.price 
       }]);
     }
@@ -325,7 +326,12 @@ function BookingDetailModal({
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-1">จำนวนผู้เข้าใช้งาน (ท่าน)</label>
-                    <input type="text" inputMode="numeric" pattern="[0-9]*" value={editGuests} onChange={(e) => setEditGuests(normalizeWholeNumberInput(e.target.value))} className="w-full bg-white p-3 rounded-xl font-bold text-sm border focus:outline-none focus:border-emerald-500" />
+                    <IntegerStepperInput
+                      value={editGuests}
+                      onChange={setEditGuests}
+                      min={1}
+                      ariaLabel="จำนวนผู้เข้าใช้งาน"
+                    />
                   </div>
                   
                   <div className="space-y-2 pt-2 border-t border-slate-300">
@@ -346,6 +352,11 @@ function BookingDetailModal({
                               {dbClubs.map((club) => {
                                 const cartItem = selectedClubs.find(item => item.clubId === club.id);
                                 const currentQty = cartItem ? cartItem.qty : 0;
+                                const originalItem = currentBooking?.rentedClubs?.find(item => item.clubId === club.id);
+                                const originalQty = Number(originalItem?.qty || 0);
+                                const maximumQty = currentBooking?.status === 'occupied'
+                                  ? originalQty + Number(club.available || 0)
+                                  : Number(club.available || 0);
                                 return (
                                   <div key={club.id} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-700">
                                     <div className="flex flex-col">
@@ -356,23 +367,15 @@ function BookingDetailModal({
                                           : `คลังรวมทั้งหมดร้าน: ${club.available} ชิ้น`}
                                       </span>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                      <button 
-                                        type="button"
-                                        onClick={() => handleUpdateClubQty(club, -1)} 
-                                        className="w-6 h-6 bg-red-100 text-red-700 hover:bg-red-200 font-black rounded flex items-center justify-center border border-red-300"
-                                      >
-                                        -
-                                      </button>
-                                      <span className="w-5 text-center text-sm font-black text-slate-800">{currentQty}</span>
-                                      <button 
-                                        type="button"
-                                        onClick={() => handleUpdateClubQty(club, 1)} 
-                                        className="w-6 h-6 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 font-black rounded flex items-center justify-center border border-emerald-300"
-                                      >
-                                        +
-                                      </button>
-                                    </div>
+                                    <IntegerStepperInput
+                                      compact
+                                      className="w-24 shrink-0"
+                                      value={currentQty}
+                                      onChange={(value) => handleUpdateClubQty(club, Number(value) - currentQty)}
+                                      min={0}
+                                      max={maximumQty}
+                                      ariaLabel={`จำนวนไม้กอล์ฟ ${club.name}`}
+                                    />
                                   </div>
                                 );
                               })}

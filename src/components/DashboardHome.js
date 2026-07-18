@@ -336,7 +336,7 @@ function SummaryRow({ title, meta, value, tone = 'slate', details = [] }) {
     <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
         <div className="text-sm font-black text-slate-800 break-words">{title}</div>
-        {meta && <div className="mt-1 text-xs font-bold text-slate-400 break-words">{meta}</div>}
+        {meta && <div className="mt-1 max-w-2xl whitespace-pre-wrap break-words text-xs font-black leading-relaxed text-slate-600">{meta}</div>}
         {details.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {details.map((detail) => (
@@ -548,7 +548,15 @@ function DashboardSummaryPanel({ selected, stats, sortMode, onSortModeChange }) 
       ) : (
         <div className="space-y-2">
           {rows.slice(0, 8).map((row, index) => (
-            <SummaryRow key={`${selected}-${index}`} {...row} />
+            <SummaryRow
+              key={`${selected}-${index}`}
+              {...row}
+              details={selected === 'memberPoints'
+                ? []
+                : selected === 'memberReviews'
+                  ? []
+                  : row.details}
+            />
           ))}
           {rows.length > 8 && (
             <div className="pt-2 text-center text-xs font-bold text-slate-400">
@@ -1025,9 +1033,9 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
       icon: 'history'
     },
     {
-      key: 'memberPendingReviews',
+      key: 'memberReviews',
       label: 'รีวิวและการให้คะแนน',
-      value: stats.reviewCount,
+      value: stats.memberReviewList.length,
       hint: 'กดเพื่อดูคะแนนที่เคยให้',
       tone: 'slate',
       icon: 'star'

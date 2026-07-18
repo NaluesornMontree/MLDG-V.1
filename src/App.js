@@ -9,7 +9,13 @@ import CustomerDashboard from './components/CustomerDashboard';
 import LaneManagement from './components/LaneManagement';
 import ReviewManagement from './components/ReviewManagement';
 import Popup from './components/Popup';
+import EmailActionHandler from './components/EmailActionHandler';
 import { normalizeFirebaseErrorMessage } from './utils/firebaseErrorMessages';
+import {
+  consumeEmailActionResult,
+  getEmailActionCodeSettings,
+  getEmailActionRequest
+} from './utils/emailActionUtils';
 
 function getAlertType(message) {
   const text = String(message || '').toLowerCase();
@@ -274,11 +280,13 @@ function PublicPortal({ onLoginRequest }) {
 }
 
 function AppContent() {
+  const [emailActionResult] = useState(() => consumeEmailActionResult());
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null); 
   const [loading, setLoading] = useState(true);
   const [resendingVerification, setResendingVerification] = useState(false);
-  const [showAuth, setShowAuth] = useState(false);
+  const [checkingVerification, setCheckingVerification] = useState(false);
+  const [showAuth, setShowAuth] = useState(() => Boolean(emailActionResult?.requiresLogin));
   const [authTransitioning, setAuthTransitioning] = useState(false);
   const [passwordResetPopup, setPasswordResetPopup] = useState({
     isOpen: false,
@@ -313,8 +321,28 @@ function AppContent() {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (!emailActionResult?.message) return;
+    window.appAlert(emailActionResult.message);
+  }, [emailActionResult]);
+
   const handleLogout = () => {
     signOut(auth).then(() => window.appAlert("ออกจากระบบเรียบร้อยแล้ว"));
+  };
+
+  const handleBackToLoginFromVerification = () => {
+    if (authTransitioning) return;
+
+    setAuthTransitioning(true);
+    window.setTimeout(async () => {
+      setShowAuth(true);
+      try {
+        await signOut(auth);
+        window.appAlert("ออกจากหน้าตรวจสอบอีเมลแล้ว");
+      } finally {
+        window.setTimeout(() => setAuthTransitioning(false), 80);
+      }
+    }, 260);
   };
 
   const handlePasswordResetEmailSent = async (email) => {
@@ -407,7 +435,7 @@ function AppContent() {
 
     setResendingVerification(true);
     try {
-      await sendEmailVerification(auth.currentUser);
+      await sendEmailVerification(auth.currentUser, getEmailActionCodeSettings());
       window.appAlert("ส่งอีเมลยืนยันอีกครั้งแล้ว กรุณาตรวจสอบกล่องจดหมายหลักและกล่องจดหมายขยะ");
     } catch (error) {
       window.appAlert("ไม่สามารถส่งอีเมลยืนยันซ้ำได้: " + error.message);
@@ -419,8 +447,22 @@ function AppContent() {
   const handleRefreshVerification = async () => {
     if (!auth.currentUser) return;
 
-    await auth.currentUser.reload();
-    window.location.reload();
+    setCheckingVerification(true);
+    try {
+      await auth.currentUser.reload();
+
+      if (!auth.currentUser.emailVerified) {
+        window.appAlert("ยังไม่พบการยืนยันอีเมล กรุณาเปิดอีเมลและกดลิงก์ยืนยันตัวตนก่อน แล้วจึงกลับมาตรวจสอบสถานะอีกครั้ง");
+        return;
+      }
+
+      window.appAlert("ยืนยันอีเมลสำเร็จแล้ว ระบบกำลังนำคุณเข้าสู่ระบบ");
+      window.location.reload();
+    } catch (error) {
+      window.appAlert("ไม่สามารถตรวจสอบสถานะอีเมลได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง");
+    } finally {
+      setCheckingVerification(false);
+    }
   };
 
   const passwordResetPopupElement = passwordResetPopup.isOpen ? (
@@ -511,8 +553,8 @@ function AppContent() {
   // กรณีที่ 2: เข้าสู่ระบบแล้ว แต่ยังไม่ได้ยืนยันอีเมล
   if (!user.emailVerified) {
     return withPasswordResetPopup(
-      <div className="flex flex-col items-center justify-center h-screen bg-slate-50 p-6">
-        <div className="w-full max-w-sm rounded-[2rem] border-t-8 border-amber-500 bg-white p-6 text-center shadow-2xl sm:p-10 sm:rounded-[3rem]">
+      <div className="flex h-screen flex-col items-center justify-center overflow-hidden bg-slate-50 p-6">
+        <div className={`w-full max-w-sm rounded-[2rem] border-t-8 border-amber-500 bg-white p-6 text-center shadow-2xl transition-all duration-300 ease-in-out motion-safe:animate-[screenEnter_0.38s_cubic-bezier(.22,1,.36,1)] motion-reduce:transition-none sm:rounded-[3rem] sm:p-10 ${authTransitioning ? '-translate-y-4 scale-[0.985] opacity-0' : 'translate-y-0 scale-100 opacity-100'}`}>
           <h2 className="text-xl font-black text-slate-800">กรุณายืนยันอีเมลของคุณ</h2>
           <p className="text-sm text-slate-500 my-4">
             ระบบได้ส่งลิงก์ยืนยันตัวตนไปที่อีเมลของท่านแล้ว กรุณาตรวจสอบในกล่องจดหมายหลัก หรือกล่องจดหมายขยะ จากนั้นกดยืนยันลิงก์ก่อนเข้าใช้งานระบบ
@@ -527,13 +569,15 @@ function AppContent() {
             </button>
             <button
               onClick={handleRefreshVerification}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-bold text-slate-700 transition-all hover:bg-slate-50"
+              disabled={checkingVerification}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-bold text-slate-700 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
             >
-              ฉันกดยืนยันแล้ว ตรวจสอบสถานะ
+              {checkingVerification ? 'กำลังตรวจสอบสถานะ...' : 'ฉันกดยืนยันแล้ว ตรวจสอบสถานะ'}
             </button>
             <button 
-              onClick={handleLogout} 
-              className="w-full rounded-2xl bg-slate-800 px-6 py-3 text-sm font-bold tracking-wider text-white shadow-md transition-all hover:bg-red-500"
+              onClick={handleBackToLoginFromVerification}
+              disabled={authTransitioning}
+              className="w-full rounded-2xl bg-slate-800 px-6 py-3 text-sm font-bold tracking-wider text-white shadow-md transition-all hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-slate-400"
             >
               กลับไปหน้าเข้าสู่ระบบ
             </button>
@@ -558,9 +602,11 @@ function AppContent() {
 }
 
 function App() {
+  const emailAction = getEmailActionRequest();
+
   return (
     <>
-      <AppContent />
+      {emailAction ? <EmailActionHandler action={emailAction} /> : <AppContent />}
       <BrowserAlertPopupBridge />
     </>
   );

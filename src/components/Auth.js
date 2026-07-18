@@ -14,6 +14,7 @@ import { doc, setDoc, getDoc } from "firebase/firestore";
 import { theme } from '../styles/theme'; 
 import { findUserByPhoneNumber, getDuplicatePhoneMessage, normalizePhoneNumber } from '../utils/userPhoneUtils';
 import { getFirebaseAuthErrorMessage } from '../utils/firebaseErrorMessages';
+import { getEmailActionCodeSettings } from '../utils/emailActionUtils';
 
 function Auth() {
   const [email, setEmail] = useState('');
@@ -27,23 +28,27 @@ function Auth() {
   const formSpacingClass = mode === 'register' ? 'space-y-3' : 'space-y-2.5';
   const compactInputClass = `${s.input} !mb-0`;
 
+  const signInExistingAccount = async () => {
+    const userCred = await signInWithEmailAndPassword(auth, email, password);
+    const userDoc = await getDoc(doc(db, "users", userCred.user.uid));
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      const isActive = userData.Is_Active ?? userData.isActive ?? true;
+      if (isActive === false) {
+        window.appAlert("บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อเจ้าของร้าน");
+        await auth.signOut();
+        return null;
+      }
+    }
+    return userCred.user;
+  };
+
   const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
       if (mode === 'login') {
-        const userCred = await signInWithEmailAndPassword(auth, email, password);
-        const userDoc = await getDoc(doc(db, "users", userCred.user.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          const isActive = userData.Is_Active ?? userData.isActive ?? true;
-          if (isActive === false) {
-            window.appAlert("บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อเจ้าของร้าน");
-            await auth.signOut();
-            setLoading(false);
-            return;
-          }
-        }
+        await signInExistingAccount();
       } else if (mode === 'register') {
         const normalizedPhone = normalizePhoneNumber(phoneNumber);
         if (normalizedPhone.length !== 10) {
@@ -60,7 +65,7 @@ function Auth() {
           return;
         }
         
-        await sendEmailVerification(userCred.user);
+        await sendEmailVerification(userCred.user, getEmailActionCodeSettings());
 
         await setDoc(doc(db, "users", userCred.user.uid), {
           User_ID: userCred.user.uid,
@@ -73,7 +78,6 @@ function Auth() {
           CreatedAt: new Date()
         });
         
-        window.appAlert("ลงทะเบียนสำเร็จ ระบบได้ส่งลิงก์ยืนยันตัวตนไปที่อีเมลของท่านแล้ว กรุณาตรวจสอบในกล่องข้อความและกดยืนยันก่อนเข้าสู่ระบบ");
         setMode('login');
       }
     } catch (err) {
@@ -195,7 +199,7 @@ function Auth() {
           }
         `}
       </style>
-      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/20 bg-white/92 p-6 text-slate-800 shadow-2xl shadow-emerald-950/30 backdrop-blur-xl transition-all duration-300 ease-out sm:p-10 sm:rounded-[2.5rem]">
+      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/20 bg-white/92 p-6 text-slate-800 shadow-2xl shadow-emerald-950/30 backdrop-blur-xl transition-all duration-300 ease-in-out motion-reduce:transition-none sm:rounded-[2.5rem] sm:p-10">
         <div key={mode} className="auth-mode-panel">
         <div className={`${s.header || ''} mb-7 sm:mb-8`}>
           <h2 className="text-3xl font-black tracking-[0.12em] text-white drop-shadow-[0_2px_10px_rgba(15,23,42,0.35)] sm:text-4xl">
@@ -301,9 +305,9 @@ function Auth() {
           </button>
           
           {mode === 'login' && (
-            <button 
+            <button
               type="button"
-              onClick={() => setMode('forgot')} 
+              onClick={() => setMode('forgot')}
               className="rounded-xl px-4 py-2 text-xs font-black text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-700"
             >
               ลืมรหัสผ่านใช่หรือไม่?

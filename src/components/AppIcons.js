@@ -138,6 +138,42 @@ export function PlusIcon({ className = '' }) {
   );
 }
 
+export function MinusIcon({ className = '' }) {
+  return (
+    <BaseIcon className={className}>
+      <path d="M5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </BaseIcon>
+  );
+}
+
+export function ChevronUpIcon({ className = '' }) {
+  return (
+    <BaseIcon className={className}>
+      <path
+        d="M6 15L12 9L18 15"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </BaseIcon>
+  );
+}
+
+export function ChevronDownIcon({ className = '' }) {
+  return (
+    <BaseIcon className={className}>
+      <path
+        d="M6 9L12 15L18 9"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </BaseIcon>
+  );
+}
+
 export function SaveIcon({ className = '' }) {
   return (
     <BaseIcon className={className}>

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, addDoc, doc, setDoc, getDocs, query, where, Timestamp } from "firebase/firestore";
 import { CheckIcon, UserIcon, WrenchIcon } from './AppIcons';
+import IntegerStepperInput from './IntegerStepperInput';
 import {
     getClubName,
     getClubPrice,
@@ -12,7 +13,7 @@ import {
     sortGolfClubsLikeInventory
 } from '../utils/golfClubUtils';
 import { areSelectedSlotsContiguous, isSelectedSlotsDraftValid } from '../utils/bookingTimeUtils';
-import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
+import { toWholeNumber } from '../utils/numberUtils';
 
 const BookingFlow = ({ user, userData }) => {
     const [step, setStep] = useState(1);
@@ -84,7 +85,7 @@ const BookingFlow = ({ user, userData }) => {
 
     const proceedToCustomerDetails = () => {
         if (!areSelectedSlotsContiguous(selectedSlots, TIME_SLOTS)) {
-            showAlert('กรุณาเลือกช่วงเวลาให้เหมือนกันทุกเลนก่อนดำเนินการต่อ เช่น เลน 1 และเลน 2 ต้องเป็นเวลา 08:00-10:00 เหมือนกัน', 'warning');
+            showAlert('กรุณาเลือกเวลาแต่ละเลนให้ต่อเนื่อง และเริ่มต้นเวลาเดียวกัน โดยสามารถเลือกเวลาเลิกต่างกันได้', 'warning');
             return;
         }
 
@@ -304,7 +305,7 @@ const BookingFlow = ({ user, userData }) => {
                 }
                 const nextSelectedSlots = { ...prevSelectedSlots, [laneKey]: updated };
                 if (!isSelectedSlotsDraftValid(nextSelectedSlots, TIME_SLOTS)) {
-                    showAlert('ไม่สามารถเลือกแบบข้ามเลนข้ามเวลาได้ ทุกเลนที่เลือกต้องใช้ช่วงเวลาเดียวกันและเวลาต้องติดกัน', 'warning');
+                    showAlert('แต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง และต้องเริ่มเวลาเดียวกัน สามารถเลือกเวลาเลิกต่างกันได้', 'warning');
                     return prevSelectedSlots;
                 }
                 return nextSelectedSlots;
@@ -313,7 +314,7 @@ const BookingFlow = ({ user, userData }) => {
             if (shouldSelect && !currentLaneSlots.includes(slot)) {
                 const nextSelectedSlots = { ...prevSelectedSlots, [laneKey]: [...currentLaneSlots, slot] };
                 if (!isSelectedSlotsDraftValid(nextSelectedSlots, TIME_SLOTS)) {
-                    showAlert('ไม่สามารถเลือกแบบข้ามเลนข้ามเวลาได้ ทุกเลนที่เลือกต้องใช้ช่วงเวลาเดียวกันและเวลาต้องติดกัน', 'warning');
+                    showAlert('แต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง และต้องเริ่มเวลาเดียวกัน สามารถเลือกเวลาเลิกต่างกันได้', 'warning');
                     return prevSelectedSlots;
                 }
                 return nextSelectedSlots;
@@ -357,23 +358,26 @@ const BookingFlow = ({ user, userData }) => {
 
     const handleClubCartUpdate = (club, change) => {
         const existing = clubCart.find(item => item.id === club.id);
+        const currentQty = existing ? Number(existing.qty || 0) : 0;
+        const newQty = Math.max(0, currentQty + change);
+
+        if (newQty > club.available) {
+            showAlert(`ไม้กอล์ฟนี้พร้อมใช้งานหน้าตู้เหลือเพียง ${club.available} ชิ้นเท่านั้น`, 'warning');
+            return;
+        }
+
         if (existing) {
-            const newQty = Math.max(0, existing.qty + change);
-            if (newQty > club.available) {
-                showAlert(`ไม้กอล์ฟนี้พร้อมใช้งานหน้าตู้เหลือเพียง ${club.available} ชิ้นเท่านั้น`, 'warning');
-                return;
-            }
             if (newQty === 0) {
                 setClubCart(clubCart.filter(item => item.id !== club.id));
             } else {
                 setClubCart(clubCart.map(item => item.id === club.id ? { ...item, qty: newQty } : item));
             }
-        } else if (change > 0) {
+        } else if (newQty > 0) {
             if (club.available < 1) {
                 showAlert("อุปกรณ์ชิ้นนี้หมดสต็อกชั่วคราว", 'warning');
                 return;
             }
-            setClubCart([...clubCart, { ...club, qty: 1 }]);
+            setClubCart([...clubCart, { ...club, qty: newQty }]);
         }
     };
 
@@ -414,7 +418,7 @@ const BookingFlow = ({ user, userData }) => {
             }
 
             if (!areSelectedSlotsContiguous(selectedSlots, TIME_SLOTS)) {
-                showAlert('ไม่สามารถเลือกแบบข้ามเลนข้ามเวลาได้ ทุกเลนที่เลือกต้องใช้ช่วงเวลาเดียวกันและเวลาต้องติดกัน', 'warning');
+                showAlert('แต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง และต้องเริ่มเวลาเดียวกัน สามารถเลือกเวลาเลิกต่างกันได้', 'warning');
                 return;
             }
 
@@ -728,13 +732,12 @@ const BookingFlow = ({ user, userData }) => {
 
                         <div>
                             <label className="block text-base font-bold text-slate-800 mb-1">จำนวนผู้เข้ามาใช้งาน</label>
-                            <input 
-                                type="text"
-                                inputMode="numeric"
-                                pattern="[0-9]*"
+                            <IntegerStepperInput
                                 value={bookingData.guests}
-                                className="w-full bg-slate-50 border border-slate-100 p-3 rounded-xl focus:outline-none focus:border-emerald-400 font-bold"
-                                onChange={(e) => setBookingData({ ...bookingData, guests: normalizeWholeNumberInput(e.target.value) })}
+                                onChange={(value) => setBookingData({ ...bookingData, guests: value })}
+                                min={1}
+                                ariaLabel="จำนวนผู้เข้าใช้บริการ"
+                                inputClassName="bg-slate-50"
                             />
                         </div>
 
@@ -823,11 +826,15 @@ const BookingFlow = ({ user, userData }) => {
                                             </p>
                                         </div>
                                         
-                                        <div className="flex items-center gap-4">
-                                            <button type="button" onClick={() => handleClubCartUpdate(club, -1)} className="w-8 h-8 bg-slate-100 text-slate-600 hover:bg-slate-200 font-black rounded-lg text-lg flex items-center justify-center border border-slate-200">-</button>
-                                            <span className="text-lg font-black w-6 text-center">{currentQty}</span>
-                                            <button type="button" onClick={() => handleClubCartUpdate(club, 1)} className="w-8 h-8 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-black rounded-lg text-lg flex items-center justify-center border border-emerald-200">+</button>
-                                        </div>
+                                        <IntegerStepperInput
+                                            compact
+                                            className="w-28 shrink-0"
+                                            value={currentQty}
+                                            onChange={(value) => handleClubCartUpdate(club, Number(value) - currentQty)}
+                                            min={0}
+                                            max={club.available}
+                                            ariaLabel={`จำนวนไม้กอล์ฟ ${club.name}`}
+                                        />
                                     </div>
                                 );
                              })}

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc, updateDoc, increment } from 'firebase/firestore';
 import { CheckIcon, UserIcon } from './AppIcons';
+import IntegerStepperInput from './IntegerStepperInput';
+import QuantityAdjuster from './QuantityAdjuster';
 import { areSelectedSlotsContiguous, isSelectedSlotsDraftValid } from '../utils/bookingTimeUtils';
 import {
   getClubName,
@@ -333,7 +335,7 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
     if (change > 0) {
       setSelectedClubs([
         ...selectedClubs,
-        { clubId: club.id, Club_Name: club.name, Club_Type: club.type, qty: 1, price: club.price }
+        { clubId: club.id, Club_Name: club.name, Club_Type: club.type, qty: newQty, price: club.price }
       ]);
     }
   };
@@ -611,7 +613,13 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 mb-1">จำนวนผู้ร่วมใช้งาน (ท่าน)</label>
-                  <input type="text" inputMode="numeric" pattern="[0-9]*" value={customerForm.guestCount} onChange={e => setCustomerForm({ ...customerForm, guestCount: normalizeWholeNumberInput(e.target.value) })} className="w-full bg-white border p-2 rounded-lg text-xs font-bold focus:outline-none text-center" />
+                  <IntegerStepperInput
+                    compact
+                    value={customerForm.guestCount}
+                    onChange={(value) => setCustomerForm({ ...customerForm, guestCount: value })}
+                    min={1}
+                    ariaLabel="จำนวนผู้ร่วมใช้งาน"
+                  />
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
@@ -695,10 +703,16 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
                                   </div>
                                 )}
                               </div>
-                              <div className="mt-2 flex items-center justify-end gap-2">
-                                <button type="button" onClick={() => handleClubQtyChange(club, -1)} className="h-8 w-8 rounded-full border border-slate-300 bg-white text-sm font-black text-slate-600">-</button>
-                                <div className="min-w-[44px] rounded-lg bg-slate-50 px-3 py-1.5 text-center text-xs font-black text-slate-800">{qty}</div>
-                                <button type="button" onClick={() => handleClubQtyChange(club, 1)} className="h-8 w-8 rounded-full border border-emerald-300 bg-emerald-100 text-sm font-black text-emerald-700">+</button>
+                              <div className="mt-2 flex justify-end">
+                                <IntegerStepperInput
+                                  compact
+                                  className="w-24"
+                                  value={qty}
+                                  onChange={(value) => handleClubQtyChange(club, Number(value) - qty)}
+                                  min={0}
+                                  max={club.available}
+                                  ariaLabel={`จำนวนไม้กอล์ฟ ${club.name}`}
+                                />
                               </div>
                             </div>
                           );
@@ -743,11 +757,14 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
                             <span className="text-slate-800 block truncate">{service.Service_Name}</span>
                             <span className="text-[10px] text-slate-400 font-medium">{rate} ฿ / {service.Unit}</span>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <button type="button" onClick={() => handleQuantityChange(service.id, -1)} disabled={isAutoService} className={`w-5 h-5 rounded flex items-center justify-center font-black text-white ${isAutoService ? 'bg-slate-300 cursor-not-allowed' : 'bg-red-400'}`}>-</button>
-                            <span className="w-4 text-center text-slate-800 text-xs">{qty}</span>
-                            <button type="button" onClick={() => handleQuantityChange(service.id, 1)} disabled={isAutoService} className={`w-5 h-5 rounded flex items-center justify-center font-black text-white ${isAutoService ? 'bg-slate-300 cursor-not-allowed' : 'bg-green-400'}`}>+</button>
-                          </div>
+                          <QuantityAdjuster
+                            className="shrink-0"
+                            value={qty}
+                            onChange={(value) => handleQuantityChange(service.id, value - qty)}
+                            min={0}
+                            disabled={isAutoService}
+                            ariaLabel={`จำนวน ${service.Service_Name}`}
+                          />
                         </div>
                       );
                     })
@@ -771,19 +788,18 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
 
                 {memberInfo ? (
                   <div className="space-y-2">
-                    <label className="block">
+                    <div className="block">
                       <span className="mb-1 block text-[11px] font-black text-slate-600">ใช้แต้มเป็นส่วนลด</span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
+                      <IntegerStepperInput
+                        compact
                         max={Math.floor(availableMemberPoints)}
                         value={safeUsedPoints}
-                        onChange={(event) => setUsedPoints(normalizeWholeNumberInput(event.target.value))}
-                        className="w-full rounded-lg border border-amber-100 bg-white p-2 text-xs font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-100"
+                        onChange={setUsedPoints}
+                        min={0}
+                        ariaLabel="จำนวนแต้มที่ใช้เป็นส่วนลด"
                         placeholder="0"
                       />
-                    </label>
+                    </div>
                     <div className="grid grid-cols-2 gap-2 text-[11px] font-black">
                       <div className="rounded-lg bg-white px-3 py-2 text-slate-600">
                         ส่วนลดแต้ม

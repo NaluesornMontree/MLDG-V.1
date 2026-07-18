@@ -3,6 +3,7 @@ import { db } from '../firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, setDoc, getDoc } from "firebase/firestore";
 import { theme } from '../styles/theme';
 import Popup from './Popup';
+import IntegerStepperInput from './IntegerStepperInput';
 import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
 
 function SystemSettings() {
@@ -267,20 +268,12 @@ function SystemSettings() {
             <div className="w-full lg:w-[360px] rounded-2xl border border-slate-100 bg-white p-4">
               <label className={s.inputLabel}>จำนวนชั่วโมงก่อนถึงเวลาเริ่มจอง</label>
               <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
+                <IntegerStepperInput
+                  className="flex-1"
                   value={bookingPolicyHours}
-                  onChange={(e) => setBookingPolicyHours(normalizeWholeHours(e.target.value))}
-                  onKeyDown={(e) => {
-                    if (['.', ',', '-', '+', 'e', 'E'].includes(e.key)) e.preventDefault();
-                  }}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    setBookingPolicyHours(normalizeWholeHours(e.clipboardData.getData('text')));
-                  }}
-                  className={s.input + ' !py-2.5 text-sm'}
+                  onChange={setBookingPolicyHours}
+                  min={0}
+                  ariaLabel="จำนวนชั่วโมงก่อนถึงเวลาเริ่มจอง"
                   placeholder="เช่น 2"
                 />
                 <button
@@ -493,7 +486,6 @@ function SystemSettings() {
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  min="0"
                   placeholder="แต้มที่ได้รับ"
                   value={tempEarn.points}
                   onChange={(e) => setTempEarn({ ...tempEarn, points: normalizeWholeNumberInput(e.target.value) })}
@@ -543,7 +535,6 @@ function SystemSettings() {
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  min="0"
                   placeholder="ใช้แต้ม"
                   value={tempRedeem.points}
                   onChange={(e) => setTempRedeem({ ...tempRedeem, points: normalizeWholeNumberInput(e.target.value) })}

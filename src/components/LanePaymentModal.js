@@ -12,6 +12,8 @@ import {
   updateDoc,
   where
 } from 'firebase/firestore';
+import IntegerStepperInput from './IntegerStepperInput';
+import QuantityAdjuster from './QuantityAdjuster';
 import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
 
 function ChevronDownIcon({ className = '' }) {
@@ -54,6 +56,34 @@ const TIME_SLOTS_ORDER = [
 
 function getUnionSlotsFromDetailedSlots(detailedSlots = {}) {
   return Array.from(new Set(Object.values(detailedSlots).flat())).sort();
+}
+
+function formatSlotRanges(slots = []) {
+  const sortedSlots = Array.from(new Set(slots))
+    .sort((a, b) => TIME_SLOTS_ORDER.indexOf(a) - TIME_SLOTS_ORDER.indexOf(b));
+
+  if (sortedSlots.length === 0) return '-';
+
+  const ranges = [];
+  let rangeStart = sortedSlots[0];
+  let rangeEnd = sortedSlots[0];
+
+  sortedSlots.slice(1).forEach((slot) => {
+    const previousIndex = TIME_SLOTS_ORDER.indexOf(rangeEnd);
+    const currentIndex = TIME_SLOTS_ORDER.indexOf(slot);
+
+    if (currentIndex === previousIndex + 1) {
+      rangeEnd = slot;
+      return;
+    }
+
+    ranges.push(`${rangeStart.split('-')[0]}-${rangeEnd.split('-')[1]}`);
+    rangeStart = slot;
+    rangeEnd = slot;
+  });
+
+  ranges.push(`${rangeStart.split('-')[0]}-${rangeEnd.split('-')[1]}`);
+  return ranges.join(', ');
 }
 
 function getBookingDetailedSlots(booking = {}) {
@@ -162,6 +192,7 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
     [checkoutLaneNumbers]
   );
   const checkoutLaneKey = checkoutLaneKeys[0] || null;
+  const checkoutDetailedSlots = booking?.checkoutDetailedSlots || booking?.Checkout_Detailed_Slots || null;
   const checkoutSlots = useMemo(() => {
     if (Array.isArray(booking?.checkoutSlots) && booking.checkoutSlots.length > 0) {
       return booking.checkoutSlots;
@@ -182,13 +213,26 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
     : Array.isArray(booking?.selectedLanes) && booking.selectedLanes.length > 0
       ? `เลน ${booking.selectedLanes.join(', ')}`
       : 'ไม่ระบุเลน';
-  const bookingTimeLabel = useMemo(() => {
-    if (!Array.isArray(checkoutSlots) || checkoutSlots.length === 0) {
-      return '-';
+  const laneTimeRows = useMemo(() => {
+    const detailedSlots = checkoutDetailedSlots || getBookingDetailedSlots(booking);
+    const laneNumbers = checkoutLaneNumbers.length > 0
+      ? checkoutLaneNumbers
+      : Object.keys(detailedSlots || {})
+        .map((key) => Number(String(key).replace('lane_', '')))
+        .filter(Number.isFinite)
+        .sort((a, b) => a - b);
+
+    if (laneNumbers.length === 0) {
+      return [{ lane: null, time: formatSlotRanges(checkoutSlots) }];
     }
 
-    return checkoutSlots.join(', ');
-  }, [checkoutSlots]);
+    return laneNumbers.map((lane) => {
+      const laneSlots = Array.isArray(detailedSlots?.[`lane_${lane}`])
+        ? detailedSlots[`lane_${lane}`]
+        : checkoutSlots;
+      return { lane, time: formatSlotRanges(laneSlots) };
+    });
+  }, [booking, checkoutDetailedSlots, checkoutLaneNumbers, checkoutSlots]);
 
   useEffect(() => {
     const fetchActiveServices = async () => {
@@ -414,6 +458,7 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
               : 0,
         Lane_Code: checkoutLaneLabel,
         Time_Slots: checkoutSlots,
+        Lane_Time_Slots: checkoutDetailedSlots || getBookingDetailedSlots(booking),
         status: 'active',
         Items_List: itemsList,
         Rented_Clubs: rentedClubs
@@ -429,18 +474,18 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
       const baseActiveDetailedSlots = booking.activeDetailedSlots || booking.Active_Detailed_Slots || {};
       const shouldReleaseWholeLanes = booking.releaseAllSlotsForLanes || booking.releaseAllSlotsForLane;
       const nextDetailedSlots = checkoutLaneKeys.length > 0
-        ? checkoutLaneKeys.reduce((currentSlots, laneKey) => {
+      ? checkoutLaneKeys.reduce((currentSlots, laneKey) => {
           const releaseSlots = shouldReleaseWholeLanes
-            ? (baseDetailedSlots[laneKey] || checkoutSlots)
-            : checkoutSlots;
+            ? (checkoutDetailedSlots?.[laneKey] || baseDetailedSlots[laneKey] || checkoutSlots)
+            : checkoutDetailedSlots?.[laneKey] || checkoutSlots;
           return removeSlotsFromDetailedSlots(currentSlots, laneKey, releaseSlots);
         }, baseDetailedSlots)
         : {};
       const nextActiveDetailedSlots = checkoutLaneKeys.length > 0
-        ? checkoutLaneKeys.reduce((currentSlots, laneKey) => {
+      ? checkoutLaneKeys.reduce((currentSlots, laneKey) => {
           const releaseSlots = shouldReleaseWholeLanes
-            ? (baseActiveDetailedSlots[laneKey] || baseDetailedSlots[laneKey] || checkoutSlots)
-            : checkoutSlots;
+            ? (checkoutDetailedSlots?.[laneKey] || baseActiveDetailedSlots[laneKey] || baseDetailedSlots[laneKey] || checkoutSlots)
+            : checkoutDetailedSlots?.[laneKey] || checkoutSlots;
           return removeSlotsFromDetailedSlots(currentSlots, laneKey, releaseSlots);
         }, baseActiveDetailedSlots)
         : {};
@@ -504,49 +549,70 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
           <p className="mt-1 text-xs font-mono text-slate-400">ID อ้างอิงระบบ: {booking.id}</p>
         </div>
 
-        <div className="mb-4 grid grid-cols-1 gap-3 rounded-2xl border border-slate-200/60 bg-slate-50 p-3 sm:mb-6 sm:grid-cols-2 sm:gap-4 sm:p-5 lg:grid-cols-5">
-          <div>
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-400">
-              ชื่อลูกค้า
-            </span>
-            <div className="truncate rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-800">
-              {booking.customerName || 'ไม่ระบุชื่อ'}
+        <div className="mb-4 rounded-2xl border border-slate-200/60 bg-slate-50 p-3 sm:mb-6 sm:p-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="sm:col-span-2 lg:col-span-2">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                ชื่อลูกค้า
+              </span>
+              <div className="flex min-h-11 items-center whitespace-normal break-words rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-base font-extrabold leading-relaxed text-slate-800">
+                {booking.customerName || 'ไม่ระบุชื่อ'}
+              </div>
+            </div>
+
+            <div>
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                เบอร์โทรติดต่อ
+              </span>
+              <div className="flex min-h-11 items-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 font-mono text-sm font-semibold text-slate-700">
+                {booking.customerPhone || '-'}
+              </div>
+            </div>
+
+            <div>
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                จำนวนผู้เข้าใช้
+              </span>
+              <div className="flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-800">
+                {booking.guestCount || 1} ท่าน
+              </div>
             </div>
           </div>
 
-          <div>
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-400">
-              เบอร์โทรติดต่อ
-            </span>
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 font-mono text-sm font-medium text-slate-700">
-              {booking.customerPhone || '-'}
+          <div className="mt-4 border-t border-slate-200 pt-4">
+            <div className="mb-2.5 flex items-center justify-between gap-3">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
+                เลนและเวลาใช้งาน
+              </span>
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-extrabold text-emerald-800">
+                {laneTimeRows.filter(({ lane }) => lane !== null).length || 1} เลน
+              </span>
             </div>
-          </div>
 
-          <div>
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-400">
-              หมายเลขเลน
-            </span>
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-extrabold text-emerald-600">
-              {checkoutLaneLabel}
-            </div>
-          </div>
-
-          <div>
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-400">
-              เวลาใช้งาน
-            </span>
-            <div className="max-h-20 overflow-y-auto break-words rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold leading-relaxed text-slate-800">
-              {bookingTimeLabel}
-            </div>
-          </div>
-
-          <div>
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-400">
-              จำนวนผู้เข้าใช้
-            </span>
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-center text-sm font-bold text-slate-800">
-              {booking.guestCount || 1} ท่าน
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {laneTimeRows.map(({ lane, time }, index) => (
+                <div
+                  key={lane ?? `time-${index}`}
+                  className="flex min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                >
+                  <div className="flex min-w-[5.5rem] shrink-0 flex-col justify-center bg-emerald-700 px-3 py-2.5 text-white">
+                    <span className="text-[10px] font-bold uppercase text-emerald-100">
+                      หมายเลข
+                    </span>
+                    <strong className="text-base font-extrabold leading-tight">
+                      {lane !== null ? `เลน ${lane}` : 'ไม่ระบุ'}
+                    </strong>
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col justify-center px-3 py-2.5">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">
+                      เวลาใช้งาน
+                    </span>
+                    <strong className="whitespace-nowrap font-mono text-sm font-extrabold text-slate-800">
+                      {time || 'ไม่ระบุเวลา'}
+                    </strong>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -570,8 +636,6 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
                   const clubRental = isClubRentalService(serviceName);
                   const isLockedClubRental = clubRental && booking.needsClubRent;
                   const maxQty = clubRental ? totalRentedClubQty : null;
-                  const decreaseDisabled = currentQty <= 0;
-                  const increaseDisabled = typeof maxQty === 'number' && currentQty >= maxQty;
                   const serviceUnit = getServiceUnit(service);
 
                   return (
@@ -600,37 +664,17 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
                               </div>
                             </div>
                           ) : (
-                            <div className="flex items-center space-x-2 rounded-xl border bg-slate-50 p-1 shadow-sm">
-                              <button
-                                onClick={() =>
-                                  handleQuantityChange(service.id, -1, { maxQty })
-                                }
-                                disabled={decreaseDisabled}
-                                className={`flex h-7 w-7 items-center justify-center rounded-lg border bg-white font-extrabold transition-all ${
-                                  decreaseDisabled
-                                    ? 'cursor-not-allowed text-slate-300'
-                                    : 'text-slate-600 hover:bg-slate-100'
-                                }`}
-                              >
-                                -
-                              </button>
-                              <span className="w-8 text-center font-mono text-sm font-extrabold text-slate-800">
-                                {currentQty}
-                              </span>
-                              <button
-                                onClick={() =>
-                                  handleQuantityChange(service.id, 1, { maxQty })
-                                }
-                                disabled={increaseDisabled}
-                                className={`flex h-7 w-7 items-center justify-center rounded-lg border bg-white font-extrabold transition-all ${
-                                  increaseDisabled
-                                    ? 'cursor-not-allowed text-slate-300'
-                                    : 'text-slate-600 hover:bg-slate-100'
-                                }`}
-                              >
-                                +
-                              </button>
-                            </div>
+                            <QuantityAdjuster
+                              value={currentQty}
+                              onChange={(value) => handleQuantityChange(
+                                service.id,
+                                value - currentQty,
+                                { maxQty }
+                              )}
+                              min={0}
+                              max={typeof maxQty === 'number' ? maxQty : null}
+                              ariaLabel={`จำนวน ${service.Service_Name}`}
+                            />
                           )}
 
                           <span className="w-24 text-right font-mono text-sm font-extrabold text-slate-800">
@@ -727,35 +771,19 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
                       ใช้แต้มเป็นส่วนลด
                     </label>
                     <div className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
+                      <IntegerStepperInput
+                        compact
+                        className="w-28"
                         value={safeUsedPoints}
                         max={Math.floor(availableMemberPoints)}
-                        onChange={(e) => setUsedPoints(normalizeWholeNumberInput(e.target.value))}
-                        className="w-20 rounded-lg border border-slate-200 bg-white py-1.5 text-center font-mono text-sm font-black text-slate-900 focus:border-emerald-500 focus:outline-none"
+                        min={0}
+                        onChange={setUsedPoints}
+                        ariaLabel="จำนวนแต้มที่ใช้เป็นส่วนลด"
+                        inputClassName="font-mono"
                       />
                       <span className="text-sm font-black text-slate-600">แต้ม</span>
                     </div>
                   </div>
-                </div>
-              </div>
-
-              <div className="hidden">
-                <span>แต้มสะสมสมาชิกคงเหลือ: {formatPoints(availableMemberPoints)} แต้ม</span>
-                <div className="flex items-center space-x-2">
-                  <span className="font-semibold text-slate-500">ส่วนลดแต้ม:</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={safeUsedPoints}
-                    max={Math.floor(availableMemberPoints)}
-                    onChange={(e) => setUsedPoints(normalizeWholeNumberInput(e.target.value))}
-                    className="w-20 rounded-lg border border-slate-200 bg-white py-1 text-center font-mono text-sm font-bold text-slate-800 focus:border-emerald-500 focus:outline-none"
-                  />
-                  <span>แต้ม</span>
                 </div>
               </div>
               {safeUsedPoints > 0 && (

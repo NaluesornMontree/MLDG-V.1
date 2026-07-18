@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, increment, serverTimestamp } from "firebase/firestore";
 import { theme } from '../styles/theme';
-import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
+import IntegerStepperInput from './IntegerStepperInput';
+import QuantityAdjuster from './QuantityAdjuster';
+import { toWholeNumber } from '../utils/numberUtils';
 
 function Checkout({ userId }) {
   // 1. สร้าง State สำหรับเก็บราคาที่ดึงมาจากฐานข้อมูล
@@ -73,13 +75,13 @@ function Checkout({ userId }) {
         {/* รายการลูกกอล์ฟ - แสดงราคาตามฐานข้อมูล */}
         <div className={s.row}>
           <span className={s.label}>ลูกกอล์ฟ ({pricing.ballPrice}.-/ถาด)</span>
-          <input type="text" inputMode="numeric" pattern="[0-9]*" value={ballCount} onChange={(e)=>setBallCount(normalizeWholeNumberInput(e.target.value))} className={s.input} />
+          <QuantityAdjuster value={ballCount} onChange={setBallCount} min={0} ariaLabel="จำนวนถาดลูกกอล์ฟ" />
         </div>
 
         {/* รายการเช่าไม้ - แสดงราคาตามฐานข้อมูล */}
         <div className={s.row}>
           <span className={s.label}>เช่าไม้กอล์ฟ ({pricing.clubPrice}.-/รอบ)</span>
-          <input type="text" inputMode="numeric" pattern="[0-9]*" value={clubCount} onChange={(e)=>setClubCount(normalizeWholeNumberInput(e.target.value))} className={s.input} />
+          <QuantityAdjuster value={clubCount} onChange={setClubCount} min={0} ariaLabel="จำนวนไม้กอล์ฟ" />
         </div>
 
         {/* ค่าปรับ - แสดงราคาตามฐานข้อมูล */}
@@ -100,7 +102,7 @@ function Checkout({ userId }) {
           </div>
           <div className="text-right">
             <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">ใช้แต้ม (ทุก {pricing.pointRate} แต้ม = ฿1)</p>
-            <input type="text" inputMode="numeric" pattern="[0-9]*" max={Math.floor(Number(userPoints) || 0)} value={safePointsToUse} onChange={(e)=>setPointsToUse(normalizeWholeNumberInput(e.target.value))} className={s.input} />
+            <IntegerStepperInput className="ml-auto w-28" compact value={safePointsToUse} onChange={setPointsToUse} min={0} max={Math.floor(Number(userPoints) || 0)} ariaLabel="จำนวนแต้มที่ใช้" />
           </div>
         </div>
       </div>

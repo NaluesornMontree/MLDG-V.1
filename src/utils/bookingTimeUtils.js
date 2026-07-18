@@ -45,24 +45,18 @@ export const isSelectedSlotsDraftValid = (selectedSlots = {}, timeSlotsOrder = [
   const everyLaneContiguous = selectedSlotGroups.every((slots) => areSlotsContiguous(slots, timeSlotsOrder));
   if (!everyLaneContiguous) return false;
 
-  const allSlots = selectedSlotGroups.flat();
-  if (!areSlotsContiguous(allSlots, timeSlotsOrder)) return false;
-
   const firstSelectedIndex = Math.min(
-    ...allSlots.map((slot) => timeSlotsOrder.indexOf(slot)).filter((index) => index >= 0)
+    ...selectedSlotGroups
+      .flat()
+      .map((slot) => timeSlotsOrder.indexOf(slot))
+      .filter((index) => index >= 0)
   );
 
   return selectedSlotGroups.every((slots) => timeSlotsOrder.indexOf(slots[0]) === firstSelectedIndex);
 };
 
 export const areSelectedSlotsContiguous = (selectedSlots = {}, timeSlotsOrder = []) => {
-  const selectedSlotGroups = Object.values(selectedSlots).filter((slots) => Array.isArray(slots) && slots.length > 0);
-  if (selectedSlotGroups.length === 0) return true;
-
-  const everyLaneContiguous = selectedSlotGroups.every((slots) => areSlotsContiguous(slots, timeSlotsOrder));
-  if (!everyLaneContiguous) return false;
-
-  return doSelectedLanesShareSameSlots(selectedSlots, timeSlotsOrder);
+  return isSelectedSlotsDraftValid(selectedSlots, timeSlotsOrder);
 };
 
 export const canAddContiguousSlot = (currentSlots = [], slot, timeSlotsOrder = []) => {

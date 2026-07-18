@@ -5,8 +5,10 @@ import {
   collection,
   doc,
   getDocs,
+  query,
   Timestamp,
-  updateDoc
+  updateDoc,
+  where
 } from 'firebase/firestore';
 import { theme } from '../styles/theme';
 import Popup from './Popup';
@@ -30,6 +32,7 @@ function ShopClosureManagement() {
   const [closedDates, setClosedDates] = useState([]);
   const [newClosedDate, setNewClosedDate] = useState({ date: '', reason: '' });
   const [loading, setLoading] = useState(true);
+  const [savingClosure, setSavingClosure] = useState(false);
   const [alertPopup, setAlertPopup] = useState({
     isOpen: false,
     type: 'info',
@@ -80,6 +83,8 @@ function ShopClosureManagement() {
   }, []);
 
   const handleAddClosureDate = async () => {
+    if (savingClosure) return;
+
     if (!newClosedDate.date) {
       setAlertPopup({
         isOpen: true,
@@ -91,7 +96,29 @@ function ShopClosureManagement() {
       return;
     }
 
+    setSavingClosure(true);
     try {
+      const bookingSnapshot = await getDocs(query(
+        collection(db, 'bookings'),
+        where('bookingDate', '==', newClosedDate.date)
+      ));
+      const nonBlockingStatuses = new Set(['cancelled', 'completed']);
+      const activeBookings = bookingSnapshot.docs.filter((bookingDoc) => {
+        const status = String(bookingDoc.data().status || '').trim().toLowerCase();
+        return !nonBlockingStatuses.has(status);
+      });
+
+      if (activeBookings.length > 0) {
+        setAlertPopup({
+          isOpen: true,
+          type: 'warning',
+          title: 'ไม่สามารถกำหนดวันปิดร้านได้',
+          message: `วันที่ ${formatThaiDate(newClosedDate.date)} มีรายการจองที่ยังใช้งานอยู่ ${activeBookings.length} รายการ กรุณาตรวจสอบหรือยกเลิกรายการจองทั้งหมดก่อนกำหนดวันปิดร้าน`,
+          onConfirm: () => setAlertPopup((prev) => ({ ...prev, isOpen: false }))
+        });
+        return;
+      }
+
       const targetDate = new Date(newClosedDate.date);
       targetDate.setHours(0, 0, 0, 0);
 
@@ -122,6 +149,8 @@ function ShopClosureManagement() {
         message: `ไม่สามารถบันทึกวันปิดร้านได้: ${error.message}`,
         onConfirm: () => setAlertPopup((prev) => ({ ...prev, isOpen: false }))
       });
+    } finally {
+      setSavingClosure(false);
     }
   };
 
@@ -200,10 +229,14 @@ function ShopClosureManagement() {
           />
         </div>
         <div className="flex items-end">
-          <button onClick={handleAddClosureDate} className={s.btnEmerald + ' w-full !py-3 text-base font-black'}>
+          <button
+            onClick={handleAddClosureDate}
+            disabled={savingClosure}
+            className={s.btnEmerald + ' w-full !py-3 text-base font-black disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-white'}
+          >
             <span className="flex items-center justify-center gap-2">
               <PlusIcon className="h-4 w-4" />
-              <span>บันทึกวันปิดร้าน</span>
+              <span>{savingClosure ? 'กำลังตรวจสอบรายการจอง...' : 'บันทึกวันปิดร้าน'}</span>
             </span>
           </button>
         </div>

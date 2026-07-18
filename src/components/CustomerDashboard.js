@@ -4,6 +4,7 @@ import { collection, query, where, getDocs, getDoc, onSnapshot, serverTimestamp,
 import BookingFlow from './BookingFlow'; 
 import { NavIcon, ResponsiveNavButton } from './DashboardNav';
 import { StarIcon } from './AppIcons';
+import IntegerStepperInput from './IntegerStepperInput';
 import AccountProfileCard from './AccountProfileCard';
 import DashboardHome from './DashboardHome';
 import {
@@ -15,7 +16,7 @@ import {
   sortGolfClubsLikeInventory
 } from '../utils/golfClubUtils';
 import { findUserByPhoneNumber, getDuplicatePhoneMessage, normalizePhoneNumber } from '../utils/userPhoneUtils';
-import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
+import { toWholeNumber } from '../utils/numberUtils';
 
 function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailSent }) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -776,7 +777,7 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
           clubId: club.id,
           Club_Name: club.name,
           Club_Type: club.type,
-          qty: 1,
+          qty: newQty,
           price: club.price
         }
       ]);
@@ -1808,13 +1809,12 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-black text-slate-500">จำนวนผู้เข้าใช้</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
+                  <IntegerStepperInput
                     value={editBookingForm.guestCount}
-                    onChange={(e) => setEditBookingForm({ ...editBookingForm, guestCount: normalizeWholeNumberInput(e.target.value) })}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-bold text-slate-700 focus:border-emerald-500 focus:outline-none"
+                    onChange={(value) => setEditBookingForm({ ...editBookingForm, guestCount: value })}
+                    min={1}
+                    ariaLabel="จำนวนผู้เข้าใช้"
+                    inputClassName="bg-slate-50"
                   />
                 </div>
                 <div>
@@ -1858,23 +1858,15 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
                                     {club.type || 'ไม่ระบุประเภท'} • พร้อมใช้งาน {club.available} ชิ้น
                                   </div>
                                 </div>
-                                <div className="flex shrink-0 items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleEditClubQtyChange(club, -1)}
-                                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-sm font-black text-rose-700 hover:bg-rose-100"
-                                  >
-                                    -
-                                  </button>
-                                  <span className="w-6 text-center text-sm font-black text-slate-800">{currentQty}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleEditClubQtyChange(club, 1)}
-                                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-sm font-black text-emerald-700 hover:bg-emerald-100"
-                                  >
-                                    +
-                                  </button>
-                                </div>
+                                <IntegerStepperInput
+                                  compact
+                                  className="w-24 shrink-0"
+                                  value={currentQty}
+                                  onChange={(value) => handleEditClubQtyChange(club, Number(value) - currentQty)}
+                                  min={0}
+                                  max={club.available}
+                                  ariaLabel={`จำนวนไม้กอล์ฟ ${club.name}`}
+                                />
                               </div>
                             );
                           })}

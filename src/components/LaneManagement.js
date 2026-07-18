@@ -5,6 +5,7 @@ import { theme } from '../styles/theme';
 import Popup from './Popup'; 
 import BookingDetailModal from './BookingDetailModal'; 
 import { CheckIcon, GolfIcon, UserIcon, WrenchIcon } from './AppIcons';
+import IntegerStepperInput from './IntegerStepperInput';
 import {
   getClubName,
   getClubPrice,
@@ -14,7 +15,7 @@ import {
   sortGolfClubsLikeInventory
 } from '../utils/golfClubUtils';
 import { areSelectedSlotsContiguous, isSelectedSlotsDraftValid } from '../utils/bookingTimeUtils';
-import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
+import { toWholeNumber } from '../utils/numberUtils';
 
 function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLoginRequest = null }) { 
   const rawRole = userData?.Role || userData?.role || '';
@@ -508,7 +509,7 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
             isOpen: true,
             type: 'warning',
             title: 'เวลาไม่ต่อเนื่อง',
-            message: 'ไม่สามารถเลือกแบบข้ามเลนข้ามเวลาได้ ทุกเลนที่เลือกต้องใช้ช่วงเวลาเดียวกันและเวลาต้องติดกัน',
+            message: 'แต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง และต้องเริ่มเวลาเดียวกัน สามารถเลือกเวลาเลิกต่างกันได้',
             onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
           });
           return prevSelectedSlots;
@@ -523,7 +524,7 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
             isOpen: true,
             type: 'warning',
             title: 'เลือกข้ามเลนข้ามเวลาไม่ได้',
-            message: 'ไม่สามารถเลือกแบบข้ามเลนข้ามเวลาได้ ทุกเลนที่เลือกต้องใช้ช่วงเวลาเดียวกันและเวลาต้องติดกัน',
+            message: 'แต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง และต้องเริ่มเวลาเดียวกัน สามารถเลือกเวลาเลิกต่างกันได้',
             onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
           });
           return prevSelectedSlots;
@@ -574,7 +575,7 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
         isOpen: true,
         type: 'warning',
         title: 'เลือกเวลาไม่ครบทุกเลน',
-        message: 'กรุณาเลือกช่วงเวลาให้เหมือนกันทุกเลนก่อนดำเนินการต่อ เช่น เลน 1 และเลน 2 ต้องเป็นเวลา 08:00-10:00 เหมือนกัน',
+        message: 'กรุณาเลือกเวลาแต่ละเลนให้ต่อเนื่อง และเริ่มต้นเวลาเดียวกัน โดยสามารถเลือกเวลาเลิกต่างกันได้',
         onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
       });
       return;
@@ -680,7 +681,7 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
     if (change > 0) {
       setWalkInSelectedClubs([
         ...walkInSelectedClubs,
-        { clubId: club.id, Club_Name: club.name, Club_Type: club.type, qty: 1, price: club.price }
+        { clubId: club.id, Club_Name: club.name, Club_Type: club.type, qty: newQty, price: club.price }
       ]);
     }
   };
@@ -767,7 +768,7 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
           isOpen: true,
           type: 'warning',
           title: 'เลือกข้ามเลนข้ามเวลาไม่ได้',
-          message: 'ไม่สามารถเลือกแบบข้ามเลนข้ามเวลาได้ ทุกเลนที่เลือกต้องใช้ช่วงเวลาเดียวกันและเวลาต้องติดกัน',
+          message: 'แต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง และต้องเริ่มเวลาเดียวกัน สามารถเลือกเวลาเลิกต่างกันได้',
           onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
         });
         return;
@@ -983,21 +984,43 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
       return;
     }
 
-    const endOptions = contiguousSlots.map((slot, index) => ({
-      endTime: slot.split('-')[1],
-      slots: contiguousSlots.slice(0, index + 1)
-    }));
+    const focusedIndex = Math.max(0, contiguousSlots.indexOf(focusedCellInfo?.slot));
+    const selectedSlots = contiguousSlots.slice(0, focusedIndex + 1);
+    const checkoutEndTime = selectedSlots[selectedSlots.length - 1]?.split('-')[1];
+    const checkoutDetailedSlots = checkoutLaneNumbers.reduce((details, lane) => {
+      const laneKey = `lane_${lane}`;
+      const laneSlots = Array.isArray(sourceDetailedSlots?.[laneKey])
+        ? sourceDetailedSlots[laneKey]
+        : selectedSlots;
+      details[laneKey] = laneSlots.filter((slot) => selectedSlots.includes(slot));
+      return details;
+    }, {});
 
-    setCheckoutPicker({
-      bookingId: currentBooking.id,
-      laneNumber,
-      laneNumbers: checkoutLaneNumbers,
-      laneKey,
-      allLaneSlots: sourceSlots,
-      contiguousSlots,
-      endOptions,
-      selectedEndTime: endOptions[endOptions.length - 1].endTime
-    });
+    if (selectedSlots.length === 0) {
+      setAlertPopup({
+        isOpen: true,
+        type: 'warning',
+        title: 'ยังไม่มีช่วงเวลาที่คิดเงิน',
+        message: 'กรุณาคลิกช่องเวลาที่ต้องการให้เป็นเวลาสิ้นสุดจริงอีกครั้ง',
+        onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
+      });
+      return;
+    }
+
+    setIsDetailModalOpen(false);
+    if (onCheckoutBooking) {
+      onCheckoutBooking({
+        bookingId: currentBooking.id,
+        laneNumber,
+        laneNumbers: checkoutLaneNumbers,
+        slot: selectedSlots[0],
+        slots: selectedSlots,
+        checkoutDetailedSlots,
+        checkoutEndTime,
+        releaseAllSlotsForLane: true,
+        releaseAllSlotsForLanes: true
+      });
+    }
     setAlertPopup(prev => ({ ...prev, isOpen: false }));
   };
 
@@ -1429,7 +1452,13 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">จำนวนผู้เข้าใช้บริการ (ท่าน)</label>
-                <input type="text" inputMode="numeric" pattern="[0-9]*" value={walkInGuests} onChange={(e) => setWalkInGuests(normalizeWholeNumberInput(e.target.value))} className="w-full bg-slate-100 p-3 rounded-xl text-sm font-bold focus:outline-none" />
+                <IntegerStepperInput
+                  value={walkInGuests}
+                  onChange={setWalkInGuests}
+                  min={1}
+                  ariaLabel="จำนวนผู้เข้าใช้บริการ"
+                  inputClassName="border-transparent bg-slate-100 text-base"
+                />
               </div>
               <div>
                 <p className="text-sm font-bold text-slate-700 mb-1">ต้องการเช่าไม้กอล์ฟหรือไม่?</p>
@@ -1508,10 +1537,16 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
                             </div>
                           )}
                         </div>
-                        <div className="mt-3 flex items-center justify-end gap-2">
-                          <button type="button" onClick={() => handleWalkInClubQtyChange(club, -1)} className="h-9 w-9 rounded-full border border-slate-300 bg-white text-lg font-black text-slate-600">-</button>
-                          <div className="min-w-[52px] rounded-xl bg-white px-3 py-2 text-center text-sm font-black text-slate-800">{qty}</div>
-                          <button type="button" onClick={() => handleWalkInClubQtyChange(club, 1)} className="h-9 w-9 rounded-full border border-emerald-300 bg-emerald-100 text-lg font-black text-emerald-700">+</button>
+                        <div className="mt-3 flex justify-end">
+                          <IntegerStepperInput
+                            compact
+                            className="w-28"
+                            value={qty}
+                            onChange={(value) => handleWalkInClubQtyChange(club, Number(value) - qty)}
+                            min={0}
+                            max={club.available}
+                            ariaLabel={`จำนวนไม้กอล์ฟ ${club.name}`}
+                          />
                         </div>
                       </div>
                     );

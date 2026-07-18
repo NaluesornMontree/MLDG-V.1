@@ -4,8 +4,9 @@ import { db } from '../firebase';
 import { collection, getDocs, doc, updateDoc, addDoc, query, where } from "firebase/firestore";
 import { theme } from '../styles/theme';
 import Popup from './Popup';
+import IntegerStepperInput from './IntegerStepperInput';
 import { getClubType, normalizeClubTypeDisplay, sortGolfClubsLikeInventory } from '../utils/golfClubUtils';
-import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
+import { toWholeNumber } from '../utils/numberUtils';
 
 function ClubManagement() {
   const clubTypeOptions = ['Driver', 'Hybrid', 'Iron', 'Putter', 'Wedge', 'Wood', 'อื่น ๆ'];
@@ -351,25 +352,21 @@ function ClubManagement() {
               </div>
               <div>
                 <label className={s.inputLabel}>จำนวนทั้งหมด (Quantity Total)</label>
-                <input 
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={newClub.Quantity_Total} 
-                  onChange={(e) => setNewClub({...newClub, Quantity_Total: normalizeWholeNumberInput(e.target.value)})} 
-                  className={s.input + " text-center"} 
+                <IntegerStepperInput
+                  value={newClub.Quantity_Total}
+                  onChange={(value) => setNewClub({ ...newClub, Quantity_Total: value })}
+                  min={0}
+                  ariaLabel="จำนวนไม้กอล์ฟทั้งหมด"
                 />
               </div>
               <div>
                 <label className={s.inputLabel}>จำนวนทั้งหมดที่ชำรุด (Repair Club Total)</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  min="0"
+                <IntegerStepperInput
                   value={newClub.Repair_Club_Total}
-                  onChange={(e) => setNewClub({...newClub, Repair_Club_Total: normalizeWholeNumberInput(e.target.value)})}
-                  className={s.input + " text-center"}
+                  onChange={(value) => setNewClub({ ...newClub, Repair_Club_Total: value })}
+                  min={0}
+                  max={newClub.Quantity_Total || 0}
+                  ariaLabel="จำนวนไม้กอล์ฟที่ชำรุด"
                 />
               </div>
             </div>
@@ -402,18 +399,21 @@ function ClubManagement() {
               </div>
               <div>
                 <label className={s.inputLabel}>จำนวนสต็อกทั้งหมด</label>
-                <input type="text" inputMode="numeric" pattern="[0-9]*" value={editData.Quantity_Total} onChange={(e) => setEditData({...editData, Quantity_Total: normalizeWholeNumberInput(e.target.value)})} className={s.input + " text-center"} />
+                <IntegerStepperInput
+                  value={editData.Quantity_Total}
+                  onChange={(value) => setEditData({ ...editData, Quantity_Total: value })}
+                  min={0}
+                  ariaLabel="จำนวนสต็อกไม้กอล์ฟทั้งหมด"
+                />
               </div>
               <div>
                 <label className={s.inputLabel}>จำนวนทั้งหมดที่ชำรุด</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  min="0"
+                <IntegerStepperInput
                   value={editData.Repair_Club_Total}
-                  onChange={(e) => setEditData({...editData, Repair_Club_Total: normalizeWholeNumberInput(e.target.value)})}
-                  className={s.input + " text-center"}
+                  onChange={(value) => setEditData({ ...editData, Repair_Club_Total: value })}
+                  min={0}
+                  max={editData.Quantity_Total || 0}
+                  ariaLabel="จำนวนไม้กอล์ฟที่ชำรุด"
                 />
               </div>
             </div>

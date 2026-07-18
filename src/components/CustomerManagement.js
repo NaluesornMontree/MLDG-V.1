@@ -3,8 +3,9 @@ import { db } from '../firebase';
 import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { theme } from '../styles/theme';
 import Popup from './Popup';
+import IntegerStepperInput from './IntegerStepperInput';
 import { findUserByPhoneNumber, getDuplicatePhoneMessage, normalizePhoneNumber } from '../utils/userPhoneUtils';
-import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
+import { toWholeNumber } from '../utils/numberUtils';
 
 function CustomerManagement() {
   const [customers, setCustomers] = useState([]);
@@ -378,14 +379,11 @@ function CustomerManagement() {
               </div>
               <div>
                 <label className={s.inputLabel}>แต้มสะสม (Points Balance)</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  min="0"
+                <IntegerStepperInput
                   value={editForm.Points_Balance}
-                  onChange={(e) => setEditForm({ ...editForm, Points_Balance: normalizeWholeNumberInput(e.target.value) })}
-                  className={s.input}
+                  onChange={(value) => setEditForm({ ...editForm, Points_Balance: value })}
+                  min={0}
+                  ariaLabel="จำนวนแต้มสะสม"
                   placeholder="0"
                 />
               </div>
