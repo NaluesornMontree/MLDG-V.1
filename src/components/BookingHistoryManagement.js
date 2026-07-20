@@ -3,7 +3,14 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { theme } from '../styles/theme';
 import { NavIcon } from './DashboardNav';
+import ReceiptDetailsModal from './ReceiptDetailsModal';
 import { toWholeNumber } from '../utils/numberUtils';
+import {
+  getPaymentItemQuantity,
+  getPaymentItemTotal,
+  getPaymentItemUnit,
+  getPaymentItemUnitPrice
+} from '../utils/paymentItemUtils';
 
 const STATUS_STYLES = {
   pending: 'bg-slate-100 text-slate-600 border-slate-200',
@@ -258,11 +265,12 @@ function BookingHistoryManagement() {
       ? selectedBookingPayment.Items_List.map((item) => `
           <tr>
             <td>${escapeReceiptText(item.item_name || item.name || '-')}</td>
-            <td class="right">${Number(item.qty || 0).toLocaleString()}</td>
-            <td class="right">${formatReceiptMoney(item.total || item.price || 0)}</td>
+            <td class="right">${formatReceiptMoney(getPaymentItemUnitPrice(item))} / ${escapeReceiptText(getPaymentItemUnit(item))}</td>
+            <td class="right">${getPaymentItemQuantity(item).toLocaleString()} ${escapeReceiptText(getPaymentItemUnit(item))}</td>
+            <td class="right">${formatReceiptMoney(getPaymentItemTotal(item))}</td>
           </tr>
         `).join('')
-      : '<tr><td colspan="3" class="muted center">ยังไม่มีรายการชำระเงิน</td></tr>';
+      : '<tr><td colspan="4" class="muted center">ยังไม่มีรายละเอียดค่าบริการ</td></tr>';
 
     receiptWindow.document.write(`
       <!doctype html>
@@ -323,7 +331,7 @@ function BookingHistoryManagement() {
               <h2>รายการไม้กอล์ฟที่เลือกเช่า</h2>
               <table><thead><tr><th>รายการ</th><th>ประเภท</th><th class="right">จำนวน</th></tr></thead><tbody>${rentedClubsHtml}</tbody></table>
               <h2>รายการชำระเงิน</h2>
-              <table><thead><tr><th>รายการ</th><th class="right">จำนวน</th><th class="right">ยอดเงิน</th></tr></thead><tbody>${paymentItemsHtml}</tbody></table>
+              <table><thead><tr><th>รายการ</th><th class="right">ราคา/หน่วย</th><th class="right">จำนวน</th><th class="right">รวม</th></tr></thead><tbody>${paymentItemsHtml}</tbody></table>
               <div class="total">
                 <div class="row"><span>ยอดรวม</span><span>${formatReceiptMoney(selectedBookingPayment.Total_Amount || 0)}</span></div>
                 <div class="row"><span>ส่วนลดจากแต้ม</span><span>${formatReceiptMoney(selectedBookingPayment.Point_Discount || 0)}</span></div>
@@ -551,10 +559,19 @@ function BookingHistoryManagement() {
         )}
       </div>
 
-      {selectedBooking && (
-        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
-          <div className="w-full max-w-3xl rounded-3xl bg-[#fcfcfb] border border-slate-200 shadow-2xl overflow-hidden">
-            <div className="border-b border-slate-200 bg-white px-4 py-3 sm:px-5 sm:py-4">
+      <ReceiptDetailsModal
+        booking={selectedBooking}
+        payment={selectedBookingPayment}
+        subtitle={selectedBooking ? `วันที่จอง: ${selectedBooking.bookingDate || '-'} | สร้างเมื่อ ${formatCreatedAt(selectedBooking.createdAt)}` : ''}
+        onClose={() => setSelectedBooking(null)}
+        onPrimaryAction={handleSaveReceipt}
+        primaryActionDisabled={!selectedBookingPayment || selectedBookingPayment.status === 'cancelled'}
+      />
+
+      {false && selectedBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-slate-900/60 p-2 backdrop-blur-sm sm:p-4">
+          <div className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-[#fcfcfb] shadow-2xl">
+            <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="text-lg sm:text-xl font-black text-slate-800">ใบเสร็จรายละเอียดการจอง</h3>
@@ -572,7 +589,7 @@ function BookingHistoryManagement() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 p-3 sm:p-4 lg:grid-cols-[minmax(0,1.55fr)_260px]">
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 sm:p-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.9fr)]">
               <div className="space-y-3">
                 <section className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
                   <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Booking Info</p>
@@ -640,28 +657,28 @@ function BookingHistoryManagement() {
                 <aside className="rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
                   <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Status</p>
                   <h4 className="mt-0.5 text-sm font-black text-slate-800">สรุปสถานะการจอง</h4>
-                  <div className="mt-3 space-y-2">
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div className="min-w-0 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                       <div className="text-[10px] font-black text-slate-400 mb-1">สถานะปัจจุบัน</div>
-                      <span className={`inline-flex rounded-xl border px-3 py-1.5 text-xs font-black ${STATUS_STYLES[selectedBooking.status] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                      <span className={`inline-flex rounded-lg border px-2.5 py-1 text-xs font-black ${STATUS_STYLES[selectedBooking.status] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
                         {getStatusLabel(selectedBooking.status)}
                       </span>
                     </div>
-                    <div className={`rounded-xl border px-3 py-2.5 ${selectedBooking.needsInstructor ? 'border-indigo-200 bg-indigo-50' : 'border-slate-100 bg-slate-50'}`}>
-                      <div className="text-[10px] font-black text-slate-400 mb-1">ผู้สอนพื้นฐานการเล่นกอล์ฟ</div>
-                      <div className={`text-sm font-black ${selectedBooking.needsInstructor ? 'text-indigo-700' : 'text-slate-500'}`}>
-                        {selectedBooking.needsInstructor ? 'ต้องการ' : 'ไม่ต้องการ'}
-                      </div>
+                    <div className="min-w-0 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                      <div className="text-[10px] font-black text-slate-400 mb-1">ผู้รับชำระเงิน</div>
+                      <div className="text-xs font-black text-slate-800 break-words">{getCashierLabel(selectedBookingPayment)}</div>
                     </div>
-                    <div className={`rounded-xl border px-3 py-2.5 ${selectedBooking.needsClubRent ? 'border-emerald-200 bg-emerald-50' : 'border-slate-100 bg-slate-50'}`}>
+                    <div className={`min-w-0 rounded-xl border px-3 py-2 ${selectedBooking.needsClubRent ? 'border-emerald-200 bg-emerald-50' : 'border-slate-100 bg-slate-50'}`}>
                       <div className="text-[10px] font-black text-slate-400 mb-1">เช่าไม้กอล์ฟ</div>
-                      <div className={`text-sm font-black ${selectedBooking.needsClubRent ? 'text-emerald-700' : 'text-slate-500'}`}>
+                      <div className={`text-xs font-black ${selectedBooking.needsClubRent ? 'text-emerald-700' : 'text-slate-500'}`}>
                         {selectedBooking.needsClubRent ? 'ต้องการ' : 'ไม่ต้องการ'}
                       </div>
                     </div>
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
-                      <div className="text-[10px] font-black text-slate-400 mb-1">ผู้รับชำระเงิน</div>
-                      <div className="text-sm font-black text-slate-800 break-words">{getCashierLabel(selectedBookingPayment)}</div>
+                    <div className={`min-w-0 rounded-xl border px-3 py-2 ${selectedBooking.needsInstructor ? 'border-indigo-200 bg-indigo-50' : 'border-slate-100 bg-slate-50'}`}>
+                      <div className="text-[10px] font-black text-slate-400 mb-1">ผู้สอนพื้นฐานการเล่นกอล์ฟ</div>
+                      <div className={`text-xs font-black ${selectedBooking.needsInstructor ? 'text-indigo-700' : 'text-slate-500'}`}>
+                        {selectedBooking.needsInstructor ? 'ต้องการ' : 'ไม่ต้องการ'}
+                      </div>
                     </div>
                   </div>
                 </aside>
@@ -674,28 +691,52 @@ function BookingHistoryManagement() {
                       ยังไม่มีข้อมูลการชำระเงินสำหรับรายการนี้
                     </div>
                   ) : (
-                    <div className="mt-3 space-y-2 rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                      <div className="flex justify-between text-sm font-bold text-slate-600">
-                        <span>ยอดรวม</span>
-                        <span>{toWholeNumber(selectedBookingPayment.Total_Amount || 0).toLocaleString()} บาท</span>
+                    <div className="mt-2 space-y-2 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                      <div className="border-b border-slate-200 pb-2">
+                        <div className="mb-1.5 text-[10px] font-black text-slate-500">รายละเอียดค่าบริการ</div>
+                        {Array.isArray(selectedBookingPayment.Items_List) && selectedBookingPayment.Items_List.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {selectedBookingPayment.Items_List.map((item, index) => (
+                              <div key={`${item.item_name || 'item'}-${index}`} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                                <div className="min-w-0">
+                                  <div className="truncate text-xs font-black text-slate-800">{item.item_name || item.name || '-'}</div>
+                                  <div className="mt-0.5 text-[10px] font-bold text-slate-500">
+                                    ราคา {getPaymentItemUnitPrice(item).toLocaleString('th-TH')} บาท/{getPaymentItemUnit(item)} · จำนวน {getPaymentItemQuantity(item).toLocaleString('th-TH')} {getPaymentItemUnit(item)}
+                                  </div>
+                                </div>
+                                <div className="shrink-0 text-sm font-black text-emerald-700">
+                                  {getPaymentItemTotal(item).toLocaleString('th-TH')} บาท
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-3 text-center text-[11px] font-bold text-slate-400">
+                            ไม่พบรายละเอียดค่าบริการในรายการนี้
+                          </div>
+                        )}
                       </div>
-                      <div className="flex justify-between text-sm font-bold text-slate-600">
-                        <span>ส่วนลดจากแต้ม</span>
-                        <span>{toWholeNumber(selectedBookingPayment.Point_Discount || 0).toLocaleString()} บาท</span>
-                      </div>
-                      <div className="grid grid-cols-1 gap-2">
-                        <div className="rounded-xl bg-white px-3 py-2">
-                          <div className="text-[10px] font-black text-slate-400">แต้มที่ได้รับ</div>
-                          <div className="text-sm font-black text-emerald-800">+{toWholeNumber(selectedBookingPayment.Earned_Points || 0).toLocaleString()} PTS</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="rounded-xl bg-white px-2.5 py-2">
+                          <div className="text-[9px] font-black text-slate-400">ยอดรวม</div>
+                          <div className="mt-0.5 whitespace-nowrap text-xs font-black text-slate-800">{toWholeNumber(selectedBookingPayment.Total_Amount || 0).toLocaleString()} บาท</div>
+                        </div>
+                        <div className="rounded-xl bg-white px-2.5 py-2">
+                          <div className="text-[9px] font-black text-slate-400">ส่วนลดแต้ม</div>
+                          <div className="mt-0.5 whitespace-nowrap text-xs font-black text-slate-800">{toWholeNumber(selectedBookingPayment.Point_Discount || 0).toLocaleString()} บาท</div>
+                        </div>
+                        <div className="rounded-xl bg-emerald-50 px-2.5 py-2">
+                          <div className="text-[9px] font-black text-emerald-600">แต้มที่ได้รับ</div>
+                          <div className="mt-0.5 whitespace-nowrap text-xs font-black text-emerald-800">+{toWholeNumber(selectedBookingPayment.Earned_Points || 0).toLocaleString()} PTS</div>
                         </div>
                       </div>
-                      <div className="flex justify-between text-sm font-bold text-slate-600">
+                      <div className="flex justify-between text-xs font-bold text-slate-600">
                         <span>วิธีชำระเงิน</span>
                         <span>{selectedBookingPayment.Payment_Method || '-'}</span>
                       </div>
-                      <div className="flex items-center justify-between border-t border-slate-200 pt-3">
-                        <span className="text-base font-black text-slate-800">ยอดสุทธิที่ชำระ</span>
-                        <span className="text-xl font-black text-emerald-700">{toWholeNumber(selectedBookingPayment.Net_Amount || 0).toLocaleString()} บาท</span>
+                      <div className="flex items-center justify-between border-t border-slate-200 pt-2">
+                        <span className="text-sm font-black text-slate-800">ยอดสุทธิที่ชำระ</span>
+                        <span className="text-lg font-black text-emerald-700">{toWholeNumber(selectedBookingPayment.Net_Amount || 0).toLocaleString()} บาท</span>
                       </div>
                     </div>
                   )}
@@ -703,7 +744,7 @@ function BookingHistoryManagement() {
               </div>
             </div>
 
-            <div className="border-t border-slate-200 bg-white px-4 py-3 sm:px-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <div className="flex shrink-0 flex-col gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
               <button
                 type="button"
                 onClick={handleSaveReceipt}

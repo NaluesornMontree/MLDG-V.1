@@ -5,11 +5,12 @@ import BookingFlow from './BookingFlow';
 import { NavIcon, ResponsiveNavButton } from './DashboardNav';
 import { StarIcon } from './AppIcons';
 import IntegerStepperInput from './IntegerStepperInput';
+import QuantityAdjuster from './QuantityAdjuster';
+import ClubRentalTotal from './ClubRentalTotal';
 import AccountProfileCard from './AccountProfileCard';
 import DashboardHome from './DashboardHome';
 import {
   getClubName,
-  getClubPrice,
   getClubRepairQty,
   getClubTotalQty,
   getClubType,
@@ -17,8 +18,16 @@ import {
 } from '../utils/golfClubUtils';
 import { findUserByPhoneNumber, getDuplicatePhoneMessage, normalizePhoneNumber } from '../utils/userPhoneUtils';
 import { toWholeNumber } from '../utils/numberUtils';
+import useClubRentalRate from '../utils/useClubRentalRate';
+import {
+  getPaymentItemQuantity,
+  getPaymentItemTotal,
+  getPaymentItemUnit,
+  getPaymentItemUnitPrice
+} from '../utils/paymentItemUtils';
 
 function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailSent }) {
+  const { clubRentalRate, clubRentalRateLoading } = useClubRentalRate();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [profileForm, setProfileForm] = useState({ FullName: '', PhoneNumber: '' });
   const [updatingProfile, setUpdatingProfile] = useState(false);
@@ -571,11 +580,12 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
       ? receiptPayment.Items_List.map((item) => `
           <tr>
             <td>${escapeReceiptText(item.item_name || item.name || '-')}</td>
-            <td class="right">${Number(item.qty || 0).toLocaleString()}</td>
-            <td class="right">${formatReceiptMoney(item.total || item.price || 0)}</td>
+            <td class="right">${formatReceiptMoney(getPaymentItemUnitPrice(item))} / ${escapeReceiptText(getPaymentItemUnit(item))}</td>
+            <td class="right">${getPaymentItemQuantity(item).toLocaleString()} ${escapeReceiptText(getPaymentItemUnit(item))}</td>
+            <td class="right">${formatReceiptMoney(getPaymentItemTotal(item))}</td>
           </tr>
         `).join('')
-      : '<tr><td colspan="3" class="muted center">ยังไม่มีรายการชำระเงิน</td></tr>';
+      : '<tr><td colspan="4" class="muted center">ยังไม่มีรายละเอียดค่าบริการ</td></tr>';
 
     receiptWindow.document.write(`
       <!doctype html>
@@ -643,7 +653,7 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
 
               <h2>รายการชำระเงิน</h2>
               <table>
-                <thead><tr><th>รายการ</th><th class="right">จำนวน</th><th class="right">ยอดเงิน</th></tr></thead>
+                <thead><tr><th>รายการ</th><th class="right">ราคา/หน่วย</th><th class="right">จำนวน</th><th class="right">รวม</th></tr></thead>
                 <tbody>${paymentItemsHtml}</tbody>
               </table>
 
@@ -709,7 +719,6 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
           id: clubDoc.id,
           name: getClubName(data),
           type: getClubType(data),
-          price: getClubPrice(data),
           available: Math.max(0, totalQty - repairQty - rentedQty),
           isActive: data.Is_Active !== false
         };
@@ -764,7 +773,7 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
         setEditSelectedClubs(editSelectedClubs.filter((item) => item.clubId !== club.id));
       } else {
         setEditSelectedClubs(editSelectedClubs.map((item) => (
-          item.clubId === club.id ? { ...item, qty: newQty } : item
+          item.clubId === club.id ? { ...item, qty: newQty, price: clubRentalRate } : item
         )));
       }
       return;
@@ -778,7 +787,7 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
           Club_Name: club.name,
           Club_Type: club.type,
           qty: newQty,
-          price: club.price
+          price: clubRentalRate
         }
       ]);
     }
@@ -795,6 +804,10 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
       window.appAlert('กรุณาเลือกไม้กอล์ฟอย่างน้อย 1 รายการ หรือเปลี่ยนเป็นไม่ต้องการเช่า');
       return;
     }
+    if (editBookingForm.needsClubRent && clubRentalRateLoading) {
+      window.appAlert('กำลังโหลดราคาค่าเช่าไม้กอล์ฟล่าสุด กรุณารอสักครู่แล้วลองอีกครั้ง');
+      return;
+    }
 
     await updateDoc(doc(db, 'bookings', editingBooking.id), {
       customerName: editBookingForm.customerName.trim(),
@@ -802,7 +815,9 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
       guestCount: Math.max(1, toWholeNumber(editBookingForm.guestCount || 1)),
       needsInstructor: Boolean(editBookingForm.needsInstructor),
       needsClubRent: Boolean(editBookingForm.needsClubRent),
-      rentedClubs: editBookingForm.needsClubRent ? editSelectedClubs : [],
+      rentedClubs: editBookingForm.needsClubRent
+        ? editSelectedClubs.map((item) => ({ ...item, price: clubRentalRate }))
+        : [],
       updatedAt: new Date().toISOString(),
       updatedBy: user.uid
     });
@@ -1691,15 +1706,20 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
                       {Array.isArray(receiptPayment.Items_List) && receiptPayment.Items_List.length > 0 && (
                         <div className="space-y-2">
                           {receiptPayment.Items_List.map((item, index) => (
-                            <div key={`${item.item_name || 'item'}-${index}`} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                            <div key={`${item.item_name || 'item'}-${index}`} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                              <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="truncate text-sm font-black text-slate-800">{item.item_name || item.name || '-'}</div>
-                                <div className="text-[11px] font-bold text-slate-400">
-                                  จำนวน {Number(item.qty || 0).toLocaleString()} รายการ
+                                <div className="mt-1 text-[11px] font-bold text-slate-500">
+                                  ราคา {getPaymentItemUnitPrice(item).toLocaleString('th-TH')} บาท/{getPaymentItemUnit(item)}
                                 </div>
                               </div>
-                              <div className="shrink-0 text-sm font-black text-slate-800">
-                                {toWholeNumber(item.total || item.price || 0).toLocaleString()} บาท
+                              <div className="shrink-0 text-right text-sm font-black text-emerald-700">
+                                {getPaymentItemTotal(item).toLocaleString('th-TH')} บาท
+                              </div>
+                              </div>
+                              <div className="mt-1 text-[10px] font-bold text-slate-400">
+                                จำนวน {getPaymentItemQuantity(item).toLocaleString('th-TH')} {getPaymentItemUnit(item)}
                               </div>
                             </div>
                           ))}
@@ -1851,16 +1871,20 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
                             const currentQty = cartItem ? Number(cartItem.qty || 0) : 0;
 
                             return (
-                              <div key={club.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                              <div key={club.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div className="min-w-0">
                                   <div className="truncate text-sm font-black text-slate-800">{club.name}</div>
+                                  <div className="mt-0.5 text-[11px] font-black text-emerald-700">
+                                    {clubRentalRateLoading
+                                      ? 'กำลังโหลดราคา...'
+                                      : `${clubRentalRate.toLocaleString('th-TH')} บาท/ชิ้น`}
+                                  </div>
                                   <div className="mt-0.5 text-[11px] font-bold text-slate-400">
                                     {club.type || 'ไม่ระบุประเภท'} • พร้อมใช้งาน {club.available} ชิ้น
                                   </div>
                                 </div>
-                                <IntegerStepperInput
-                                  compact
-                                  className="w-24 shrink-0"
+                                <QuantityAdjuster
+                                  className="self-end shrink-0 sm:self-auto"
                                   value={currentQty}
                                   onChange={(value) => handleEditClubQtyChange(club, Number(value) - currentQty)}
                                   min={0}
@@ -1872,6 +1896,12 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
                           })}
                         </div>
                       )}
+                      <ClubRentalTotal
+                        className="mt-3"
+                        selectedClubs={editSelectedClubs}
+                        rate={clubRentalRate}
+                        loading={clubRentalRateLoading}
+                      />
                     </div>
                   )}
                 </div>

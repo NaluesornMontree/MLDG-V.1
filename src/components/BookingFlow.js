@@ -4,9 +4,10 @@ import { db } from '../firebase';
 import { collection, addDoc, doc, setDoc, getDocs, query, where, Timestamp } from "firebase/firestore";
 import { CheckIcon, UserIcon, WrenchIcon } from './AppIcons';
 import IntegerStepperInput from './IntegerStepperInput';
+import QuantityAdjuster from './QuantityAdjuster';
+import ClubRentalTotal from './ClubRentalTotal';
 import {
     getClubName,
-    getClubPrice,
     getClubRepairQty,
     getClubTotalQty,
     getClubType,
@@ -14,8 +15,10 @@ import {
 } from '../utils/golfClubUtils';
 import { areSelectedSlotsContiguous, isSelectedSlotsDraftValid } from '../utils/bookingTimeUtils';
 import { toWholeNumber } from '../utils/numberUtils';
+import useClubRentalRate from '../utils/useClubRentalRate';
 
 const BookingFlow = ({ user, userData }) => {
+    const { clubRentalRate, clubRentalRateLoading } = useClubRentalRate();
     const [step, setStep] = useState(1);
     const [bookingData, setBookingData] = useState({
         date: '',
@@ -210,7 +213,6 @@ const BookingFlow = ({ user, userData }) => {
                         id: d.id,
                         name: getClubName(clubData),
                         type: getClubType(clubData),
-                        price: getClubPrice(clubData),
                         available: Math.max(0, totalQty - repairQty - rentedQty),
                         isActive: clubData.Is_Active !== false
                     };
@@ -370,14 +372,16 @@ const BookingFlow = ({ user, userData }) => {
             if (newQty === 0) {
                 setClubCart(clubCart.filter(item => item.id !== club.id));
             } else {
-                setClubCart(clubCart.map(item => item.id === club.id ? { ...item, qty: newQty } : item));
+                setClubCart(clubCart.map(item => item.id === club.id
+                    ? { ...item, qty: newQty, price: clubRentalRate }
+                    : item));
             }
         } else if (newQty > 0) {
             if (club.available < 1) {
                 showAlert("อุปกรณ์ชิ้นนี้หมดสต็อกชั่วคราว", 'warning');
                 return;
             }
-            setClubCart([...clubCart, { ...club, qty: newQty }]);
+            setClubCart([...clubCart, { ...club, qty: newQty, price: clubRentalRate }]);
         }
     };
 
@@ -405,6 +409,11 @@ const BookingFlow = ({ user, userData }) => {
     const handleBookingSubmission = async () => {
         if (!bookingData.customerName.trim() || bookingData.phone.length !== 10) {
             showAlert("กรุณากรอกชื่อและเบอร์โทรศัพท์ติดต่อของลูกค้าให้ครบ 10 หลัก", 'warning');
+            return;
+        }
+
+        if (bookingData.needsClubRent && clubRentalRateLoading) {
+            showAlert('กำลังโหลดราคาค่าเช่าไม้กอล์ฟ กรุณารอสักครู่แล้วลองอีกครั้ง', 'warning');
             return;
         }
 
@@ -436,7 +445,7 @@ const BookingFlow = ({ user, userData }) => {
                 needsClubRent: bookingData.needsClubRent,
                 selectedLanes: lanesArray, 
                 laneNumber: lanesArray.join(", "),
-                rentedClubs: bookingData.needsClubRent ? clubCart.map(i => ({ clubId: i.id, Club_Name: i.name, Club_Type: i.type, qty: i.qty, price: i.price })) : [],
+                rentedClubs: bookingData.needsClubRent ? clubCart.map(i => ({ clubId: i.id, Club_Name: i.name, Club_Type: i.type, qty: i.qty, price: clubRentalRate })) : [],
                 status: 'pending',
                 createdAt: new Date().toISOString()
             };
@@ -818,23 +827,32 @@ const BookingFlow = ({ user, userData }) => {
 
                                 return (
                                     <div key={club.id} className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-100 flex flex-col sm:flex-row justify-between sm:items-center gap-4 shadow-sm">
-                                        <div>
+                                        <div className="min-w-0">
                                             <h4 className="text-xl font-bold text-slate-800">{club.name}</h4>
                                             <p className="text-xs font-black text-emerald-700 mt-0.5">{club.type}</p>
                                             <p className={`text-sm font-bold mt-1 ${club.available === 0 ? 'text-rose-500' : 'text-slate-400'}`}>
                                                 พร้อมให้เช่าจริงหน้าตู้ในวันนี้ : {club.available} ชิ้น
                                             </p>
                                         </div>
-                                        
-                                        <IntegerStepperInput
-                                            compact
-                                            className="w-28 shrink-0"
-                                            value={currentQty}
-                                            onChange={(value) => handleClubCartUpdate(club, Number(value) - currentQty)}
-                                            min={0}
-                                            max={club.available}
-                                            ariaLabel={`จำนวนไม้กอล์ฟ ${club.name}`}
-                                        />
+
+                                        <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:flex-col sm:items-end">
+                                            <div className="text-left sm:text-right">
+                                                <div className="text-xs font-bold text-slate-400">ราคาเช่า/ชิ้น</div>
+                                                <div className="text-base font-black text-slate-800">
+                                                    {clubRentalRateLoading
+                                                        ? 'กำลังโหลดราคา...'
+                                                        : `${clubRentalRate.toLocaleString('th-TH')} บาท`}
+                                                </div>
+                                            </div>
+                                            <QuantityAdjuster
+                                                className="shrink-0"
+                                                value={currentQty}
+                                                onChange={(value) => handleClubCartUpdate(club, Number(value) - currentQty)}
+                                                min={0}
+                                                max={club.available}
+                                                ariaLabel={`จำนวนไม้กอล์ฟ ${club.name}`}
+                                            />
+                                        </div>
                                     </div>
                                 );
                              })}
@@ -845,13 +863,27 @@ const BookingFlow = ({ user, userData }) => {
                             <h3 className="text-xl font-black mb-4 tracking-wide">รายการยืมไม้</h3>
                             <div className="space-y-2 mb-6 max-h-60 overflow-y-auto">
                                 {clubCart.map(item => (
-                                    <div key={item.id} className="flex justify-between items-center bg-white p-3 rounded-lg border text-sm font-bold">
-                                        <span className="truncate max-w-[130px]">{item.name}</span>
+                                    <div key={item.id} className="flex justify-between items-center gap-3 bg-white p-3 rounded-lg border text-sm font-bold">
+                                        <div className="min-w-0">
+                                            <span className="block truncate">{item.name}</span>
+                                            <span className="block text-[11px] font-bold text-slate-400">
+                                                {clubRentalRateLoading
+                                                    ? 'กำลังโหลดราคา...'
+                                                    : `${clubRentalRate.toLocaleString('th-TH')} บาท/ชิ้น`}
+                                            </span>
+                                        </div>
                                         <span className="bg-slate-200 px-3 py-0.5 rounded text-slate-700">{item.qty} ชิ้น</span>
                                     </div>
                                 ))}
                                 {clubCart.length === 0 && <p className="text-slate-400 italic text-center py-4 text-sm">ยังไม่ได้เลือกไม้กอล์ฟ</p>}
                             </div>
+
+                            <ClubRentalTotal
+                                className="mb-4"
+                                selectedClubs={clubCart}
+                                rate={clubRentalRate}
+                                loading={clubRentalRateLoading}
+                            />
 
                             <button onClick={handleBookingSubmission} className="w-full bg-emerald-600 border border-emerald-700 hover:bg-emerald-700 text-white font-extrabold py-3 rounded-xl shadow-sm block text-center transition-all">
                                 ยืนยันการจอง + ยืมไม้

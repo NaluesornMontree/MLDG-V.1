@@ -6,9 +6,10 @@ import Popup from './Popup';
 import BookingDetailModal from './BookingDetailModal'; 
 import { CheckIcon, GolfIcon, UserIcon, WrenchIcon } from './AppIcons';
 import IntegerStepperInput from './IntegerStepperInput';
+import QuantityAdjuster from './QuantityAdjuster';
+import ClubRentalTotal from './ClubRentalTotal';
 import {
   getClubName,
-  getClubPrice,
   getClubRepairQty,
   getClubTotalQty,
   getClubType,
@@ -16,8 +17,10 @@ import {
 } from '../utils/golfClubUtils';
 import { areSelectedSlotsContiguous, isSelectedSlotsDraftValid } from '../utils/bookingTimeUtils';
 import { toWholeNumber } from '../utils/numberUtils';
+import useClubRentalRate from '../utils/useClubRentalRate';
 
 function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLoginRequest = null }) { 
+  const { clubRentalRate, clubRentalRateLoading } = useClubRentalRate();
   const rawRole = userData?.Role || userData?.role || '';
   const isOwner = rawRole.trim().toLowerCase() === 'owner';
   const getLocalDateValue = () => {
@@ -629,7 +632,6 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
           id: clubDoc.id,
           name: getClubName(data),
           type: getClubType(data),
-          price: getClubPrice(data),
           available: availableQty,
           isActive: data.Is_Active !== false
         };
@@ -671,7 +673,7 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
       } else {
         setWalkInSelectedClubs(
           walkInSelectedClubs.map((item) => (
-            item.clubId === club.id ? { ...item, qty: newQty } : item
+            item.clubId === club.id ? { ...item, qty: newQty, price: clubRentalRate } : item
           ))
         );
       }
@@ -681,7 +683,7 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
     if (change > 0) {
       setWalkInSelectedClubs([
         ...walkInSelectedClubs,
-        { clubId: club.id, Club_Name: club.name, Club_Type: club.type, qty: newQty, price: club.price }
+        { clubId: club.id, Club_Name: club.name, Club_Type: club.type, qty: newQty, price: clubRentalRate }
       ]);
     }
   };
@@ -746,6 +748,16 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
       });
       return;
     }
+    if (walkInNeedsClubRent && clubRentalRateLoading) {
+      setAlertPopup({
+        isOpen: true,
+        type: 'warning',
+        title: 'กำลังโหลดราคาค่าเช่า',
+        message: 'กรุณารอสักครู่เพื่อโหลดราคาค่าเช่าไม้กอล์ฟล่าสุดจากระบบ',
+        onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
+      });
+      return;
+    }
 
     try {
       const lanesArray = getSelectedLanesArray();
@@ -792,7 +804,9 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
         needsClubRent: walkInNeedsClubRent,
         selectedLanes: lanesArray,
         laneNumber: lanesArray.join(", "),
-        rentedClubs: walkInNeedsClubRent ? walkInSelectedClubs : [],
+        rentedClubs: walkInNeedsClubRent
+          ? walkInSelectedClubs.map((item) => ({ ...item, price: clubRentalRate }))
+          : [],
         status: bookingStatus,
         bookingType,
         createdAt: new Date().toISOString()
@@ -1530,17 +1544,17 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
                             <div className="text-xs font-bold text-slate-400">{club.type || 'ไม่ระบุประเภทไม้'}</div>
                             <div className="mt-1 text-xs font-bold text-emerald-600">พร้อมใช้งาน {club.available} ชิ้น</div>
                           </div>
-                          {club.price > 0 && (
-                            <div className="text-right">
-                              <div className="text-xs font-bold text-slate-400">ราคา/ชิ้น</div>
-                              <div className="text-sm font-black text-slate-800">{club.price} บาท</div>
+                          <div className="shrink-0 text-right">
+                            <div className="text-xs font-bold text-slate-400">ราคาเช่า/ชิ้น</div>
+                            <div className="text-sm font-black text-slate-800">
+                              {clubRentalRateLoading
+                                ? 'กำลังโหลดราคา...'
+                                : `${clubRentalRate.toLocaleString('th-TH')} บาท`}
                             </div>
-                          )}
+                          </div>
                         </div>
                         <div className="mt-3 flex justify-end">
-                          <IntegerStepperInput
-                            compact
-                            className="w-28"
+                          <QuantityAdjuster
                             value={qty}
                             onChange={(value) => handleWalkInClubQtyChange(club, Number(value) - qty)}
                             min={0}
@@ -1553,6 +1567,11 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
                   })}
                 </div>
               )}
+              <ClubRentalTotal
+                selectedClubs={walkInSelectedClubs}
+                rate={clubRentalRate}
+                loading={clubRentalRateLoading}
+              />
             </div>
             <div className="flex flex-col sm:flex-row gap-3 pt-6">
               <button onClick={() => { setWalkInModalStep('details'); setIsWalkInModalOpen(true); }} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 rounded-xl text-sm">ย้อนกลับไปฟอร์ม</button>

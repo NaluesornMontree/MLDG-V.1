@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase'; 
-import { collection, query, where, getDocs, onSnapshot, doc, updateDoc, orderBy, Timestamp, increment } from 'firebase/firestore';
+import { collection, query, where, getDoc, getDocs, onSnapshot, doc, updateDoc, orderBy, Timestamp, increment } from 'firebase/firestore';
 import Popup from './Popup'; 
 import LanePaymentModal from './LanePaymentModal';
 import OtherIncomeModal from './OtherIncomeModal';
 import { NavIcon } from './DashboardNav';
+import ReceiptDetailsModal from './ReceiptDetailsModal';
 import { toWholeNumber } from '../utils/numberUtils';
 
 const getCheckoutTarget = (value) => (
@@ -32,6 +33,7 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [selectedPayment, setSelectedPayment] = useState(null);
+  const [selectedPaymentBooking, setSelectedPaymentBooking] = useState(null);
   const [isOtherIncomeModalOpen, setIsOtherIncomeModalOpen] = useState(false);
   const [voidConfirmTargetId, setVoidConfirmTargetId] = useState(null);
   const [voidReasonTarget, setVoidReasonTarget] = useState(null);
@@ -88,6 +90,31 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
       return timeSlots;
     }
     return '-';
+  };
+
+  const handleOpenPaymentDetails = async (payment) => {
+    setSelectedPayment(payment);
+    setSelectedPaymentBooking(null);
+
+    const bookingId = payment?.Booking_ID || payment?.bookingId;
+    if (!bookingId || String(bookingId).startsWith('manual_income_')) return;
+
+    try {
+      const bookingSnapshot = await getDoc(doc(db, 'bookings', bookingId));
+      if (bookingSnapshot.exists()) {
+        setSelectedPaymentBooking({
+          paymentId: payment.id,
+          booking: { id: bookingSnapshot.id, ...bookingSnapshot.data() }
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching booking for payment details:', error);
+    }
+  };
+
+  const handleClosePaymentDetails = () => {
+    setSelectedPayment(null);
+    setSelectedPaymentBooking(null);
   };
 
   const getLaneSortNumber = (value) => {
@@ -304,7 +331,7 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
   return (
     <div className="w-full max-w-[1600px] mx-auto rounded-[1.75rem] border border-slate-200 bg-white p-5 font-sans text-slate-800 shadow-sm relative select-none sm:p-8">
       <div className="border-b border-slate-100 pb-4 mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
-        <h1 className="text-xl sm:text-2xl font-black text-slate-800 leading-tight">ระบบจัดการและคิดเงินรายได้หน้าร้าน</h1>
+        <h1 className="text-xl sm:text-2xl font-black text-slate-800 leading-tight">คิดเงินและจัดการรายได้</h1>
         <button onClick={() => setIsOtherIncomeModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2.5 rounded-xl shadow text-sm transition-all w-full sm:w-auto">
           เพิ่มข้อมูลรายได้ใหม่
         </button>
@@ -443,7 +470,7 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
 
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <button
-                    onClick={() => setSelectedPayment(item)}
+                    onClick={() => handleOpenPaymentDetails(item)}
                     className="w-full text-xs font-black px-3 py-2 rounded-xl border transition-all bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
                   >
                     ตรวจสอบรายการ
@@ -496,7 +523,7 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
                     <td className="py-2 text-right pr-2">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => setSelectedPayment(item)}
+                          onClick={() => handleOpenPaymentDetails(item)}
                           className="text-xs font-black px-3 py-1 rounded-lg border transition-all bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
                         >
                           ตรวจสอบรายการ
@@ -529,7 +556,17 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
           cashierInfo={cashierInfo}
         />
       )}
-      {selectedPayment && (
+      <ReceiptDetailsModal
+        booking={selectedPaymentBooking && selectedPaymentBooking.paymentId === selectedPayment?.id
+          ? selectedPaymentBooking.booking
+          : null}
+        payment={selectedPayment}
+        title="ใบเสร็จรายละเอียดการจอง"
+        subtitle={selectedPayment ? `บันทึกเมื่อ: ${selectedPaymentDateLabel}` : ''}
+        onClose={handleClosePaymentDetails}
+      />
+
+      {false && selectedPayment && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 p-3 backdrop-blur-sm modal-overlay-transition sm:items-center sm:p-4">
           <div className="modal-card-transition flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-[#fcfcfb] text-left shadow-2xl">
             <div className="shrink-0 border-b border-slate-200 bg-white/95 px-5 py-4 sm:px-6">

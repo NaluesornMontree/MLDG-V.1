@@ -1,19 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc, updateDoc, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc, updateDoc, increment, onSnapshot } from 'firebase/firestore';
 import { CheckIcon, UserIcon } from './AppIcons';
 import IntegerStepperInput from './IntegerStepperInput';
 import QuantityAdjuster from './QuantityAdjuster';
+import ClubRentalTotal from './ClubRentalTotal';
 import { areSelectedSlotsContiguous, isSelectedSlotsDraftValid } from '../utils/bookingTimeUtils';
 import {
   getClubName,
-  getClubPrice,
   getClubRepairQty,
   getClubTotalQty,
   getClubType,
   sortGolfClubsLikeInventory
 } from '../utils/golfClubUtils';
 import { normalizeWholeNumberInput, toWholeNumber } from '../utils/numberUtils';
+import useClubRentalRate from '../utils/useClubRentalRate';
 
 function isClubRentalService(serviceName = '') {
   return serviceName.includes('ไม้กอล์ฟ') || serviceName.includes('Club');
@@ -24,6 +25,7 @@ function isInstructorService(serviceName = '') {
 }
 
 function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
+  const { clubRentalRate, clubRentalRateLoading } = useClubRentalRate();
   const [customerForm, setCustomerForm] = useState({
     customerName: '',
     customerEmail: '',
@@ -56,36 +58,39 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
 
   // 1. ดึงรายการตั้งค่าค่าบริการทั้งหมดจากฐานข้อมูล service_settings
   useEffect(() => {
-    const fetchServices = async () => {
-      setLoadingServices(true);
-      try {
-        const q = query(collection(db, 'service_settings'), where('Is_Active', '==', true));
-        const snapshot = await getDocs(q);
-        const servicesData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setServices(servicesData);
+    if (!isOpen) return undefined;
 
-        const initialQuantities = {};
-        servicesData.forEach(s => {
-          initialQuantities[s.id] = 0;
+    setLoadingServices(true);
+    setNeedsInstructor(false);
+    setNeedsClubRent(false);
+    setSelectedClubs([]);
+    setClubInventory([]);
+    setUsedPoints(0);
+
+    const servicesQuery = query(
+      collection(db, 'service_settings'),
+      where('Is_Active', '==', true)
+    );
+    const unsubscribe = onSnapshot(servicesQuery, (snapshot) => {
+      const servicesData = snapshot.docs.map((serviceDoc) => ({
+        id: serviceDoc.id,
+        ...serviceDoc.data()
+      }));
+      setServices(servicesData);
+      setQuantities((currentQuantities) => {
+        const nextQuantities = {};
+        servicesData.forEach((service) => {
+          nextQuantities[service.id] = currentQuantities[service.id] || 0;
         });
-        setQuantities(initialQuantities);
-      } catch (error) {
-        console.error("Error fetching services: ", error);
-      }
+        return nextQuantities;
+      });
       setLoadingServices(false);
-    };
+    }, (error) => {
+      console.error('Error listening to services:', error);
+      setLoadingServices(false);
+    });
 
-    if (isOpen) {
-      fetchServices();
-      setNeedsInstructor(false);
-      setNeedsClubRent(false);
-      setSelectedClubs([]);
-      setClubInventory([]);
-      setUsedPoints(0);
-    }
+    return unsubscribe;
   }, [isOpen]);
 
   useEffect(() => {
@@ -284,7 +289,6 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
           id: clubDoc.id,
           name: getClubName(data),
           type: getClubType(data),
-          price: getClubPrice(data),
           available: availableQty,
           isActive: data.Is_Active !== false
         };
@@ -326,7 +330,7 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
         setSelectedClubs(selectedClubs.filter((item) => item.clubId !== club.id));
       } else {
         setSelectedClubs(selectedClubs.map((item) => (
-          item.clubId === club.id ? { ...item, qty: newQty } : item
+          item.clubId === club.id ? { ...item, qty: newQty, price: clubRentalRate } : item
         )));
       }
       return;
@@ -335,7 +339,7 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
     if (change > 0) {
       setSelectedClubs([
         ...selectedClubs,
-        { clubId: club.id, Club_Name: club.name, Club_Type: club.type, qty: newQty, price: club.price }
+        { clubId: club.id, Club_Name: club.name, Club_Type: club.type, qty: newQty, price: clubRentalRate }
       ]);
     }
   };
@@ -414,6 +418,16 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
         type: 'warning',
         title: 'กรุณาเลือกไม้กอล์ฟ',
         message: 'เลือกต้องการเช่าไม้กอล์ฟแล้ว กรุณาเลือกไม้กอล์ฟจากรายการในฐานข้อมูลอย่างน้อย 1 รายการ',
+        onConfirm: () => setAlert(prev => ({ ...prev, isOpen: false }))
+      });
+      return;
+    }
+    if (needsClubRent && clubRentalRateLoading) {
+      setAlert({
+        isOpen: true,
+        type: 'warning',
+        title: 'กำลังโหลดราคาค่าเช่า',
+        message: 'กรุณารอสักครู่เพื่อโหลดราคาค่าเช่าไม้กอล์ฟล่าสุดจากระบบ',
         onConfirm: () => setAlert(prev => ({ ...prev, isOpen: false }))
       });
       return;
@@ -497,7 +511,9 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
         Source_Type: 'manual_income',
         status: 'active',
         Items_List: itemsList,
-        Rented_Clubs: needsClubRent ? selectedClubs : []
+        Rented_Clubs: needsClubRent
+          ? selectedClubs.map((item) => ({ ...item, price: clubRentalRate }))
+          : []
       });
 
       if (matchedMember?.id && pointBalanceChange !== 0) {
@@ -696,17 +712,17 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
                                   <div className="text-[10px] font-bold text-slate-400">{club.type || 'ไม่ระบุประเภทไม้'}</div>
                                   <div className="mt-0.5 text-[10px] font-bold text-emerald-600">พร้อมใช้งาน {club.available} ชิ้น</div>
                                 </div>
-                                {club.price > 0 && (
-                                  <div className="text-right text-[10px] font-bold text-slate-400">
-                                    ราคา/ชิ้น
-                                    <div className="text-xs font-black text-slate-800">{club.price} บาท</div>
+                                <div className="shrink-0 text-right text-[10px] font-bold text-slate-400">
+                                  ราคาเช่า/ชิ้น
+                                  <div className="text-xs font-black text-slate-800">
+                                    {clubRentalRateLoading
+                                      ? 'กำลังโหลดราคา...'
+                                      : `${clubRentalRate.toLocaleString('th-TH')} บาท`}
                                   </div>
-                                )}
+                                </div>
                               </div>
                               <div className="mt-2 flex justify-end">
-                                <IntegerStepperInput
-                                  compact
-                                  className="w-24"
+                                <QuantityAdjuster
                                   value={qty}
                                   onChange={(value) => handleClubQtyChange(club, Number(value) - qty)}
                                   min={0}
@@ -719,6 +735,12 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
                         })}
                       </div>
                     )}
+                    <ClubRentalTotal
+                      className="mt-3"
+                      selectedClubs={selectedClubs}
+                      rate={clubRentalRate}
+                      loading={clubRentalRateLoading}
+                    />
                   </div>
                 )}
                 

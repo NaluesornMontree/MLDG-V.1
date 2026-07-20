@@ -4,16 +4,18 @@ import { db } from '../firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { SaveIcon } from './AppIcons';
 import IntegerStepperInput from './IntegerStepperInput';
+import QuantityAdjuster from './QuantityAdjuster';
+import ClubRentalTotal from './ClubRentalTotal';
 import Popup from './Popup';
 import {
   getClubName,
-  getClubPrice,
   getClubRepairQty,
   getClubTotalQty,
   getClubType,
   sortGolfClubsLikeInventory
 } from '../utils/golfClubUtils';
 import { toWholeNumber } from '../utils/numberUtils';
+import useClubRentalRate from '../utils/useClubRentalRate';
 
 function BookingDetailModal({ 
   isOpen, 
@@ -28,6 +30,7 @@ function BookingDetailModal({
   isCheckInAllowed = true,
   checkInDisabledMessage = ''
 }) {
+  const { clubRentalRate, clubRentalRateLoading } = useClubRentalRate();
   const [isEditMode, setIsEditMode] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
@@ -67,7 +70,6 @@ function BookingDetailModal({
               id: doc.id,
               name: getClubName(data),
               type: getClubType(data),
-              price: getClubPrice(data),
               totalQty: getClubTotalQty(data),
               repairQty: getClubRepairQty(data),
               isActive: data.Is_Active !== false,
@@ -115,7 +117,6 @@ function BookingDetailModal({
             id: club.id,
             name: club.name,
             type: club.type,
-            price: club.price,
             available: netAvailable,
             isActive: club.isActive
           };
@@ -193,7 +194,7 @@ function BookingDetailModal({
         setSelectedClubs(selectedClubs.filter(item => item.clubId !== club.id));
       } else {
         setSelectedClubs(selectedClubs.map(item => 
-          item.clubId === club.id ? { ...item, qty: newQty } : item
+          item.clubId === club.id ? { ...item, qty: newQty, price: clubRentalRate } : item
         ));
       }
     } else if (change > 0) {
@@ -201,7 +202,7 @@ function BookingDetailModal({
         clubId: club.id, 
         Club_Name: club.name, 
         qty: newQty,
-        price: club.price 
+        price: clubRentalRate
       }]);
     }
   };
@@ -229,8 +230,21 @@ function BookingDetailModal({
       });
       return;
     }
+    if (editClubRent && clubRentalRateLoading) {
+      setAlertPopup({
+        isOpen: true,
+        type: 'warning',
+        title: 'กำลังโหลดราคาค่าเช่า',
+        message: 'กรุณารอสักครู่เพื่อโหลดราคาค่าเช่าไม้กอล์ฟล่าสุดจากระบบ',
+        onConfirm: () => setAlertPopup((prev) => ({ ...prev, isOpen: false })),
+        onCancel: null
+      });
+      return;
+    }
     
-    const finalClubsArray = editClubRent ? selectedClubs : [];
+    const finalClubsArray = editClubRent
+      ? selectedClubs.map((item) => ({ ...item, price: clubRentalRate }))
+      : [];
 
     onUpdateBooking(currentBooking.id, {
       customerName: editName,
@@ -358,18 +372,22 @@ function BookingDetailModal({
                                   ? originalQty + Number(club.available || 0)
                                   : Number(club.available || 0);
                                 return (
-                                  <div key={club.id} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-700">
-                                    <div className="flex flex-col">
-                                      <span className="truncate max-w-[140px]">{club.name}</span>
+                                  <div key={club.id} className="flex flex-col gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="flex min-w-0 flex-col">
+                                      <span className="truncate">{club.name}</span>
+                                      <span className="text-[10px] font-bold text-emerald-700">
+                                        {club.type || 'ไม่ระบุประเภทไม้'} · {clubRentalRateLoading
+                                          ? 'กำลังโหลดราคา...'
+                                          : `${clubRentalRate.toLocaleString('th-TH')} บาท/ชิ้น`}
+                                      </span>
                                       <span className="text-[10px] text-slate-400 font-bold">
                                         {currentBooking?.status === 'occupied' 
                                           ? `พร้อมให้ยืมหน้าตู้: ${club.available} ชิ้น` 
                                           : `คลังรวมทั้งหมดร้าน: ${club.available} ชิ้น`}
                                       </span>
                                     </div>
-                                    <IntegerStepperInput
-                                      compact
-                                      className="w-24 shrink-0"
+                                    <QuantityAdjuster
+                                      className="self-end shrink-0 sm:self-auto"
                                       value={currentQty}
                                       onChange={(value) => handleUpdateClubQty(club, Number(value) - currentQty)}
                                       min={0}
@@ -381,6 +399,11 @@ function BookingDetailModal({
                               })}
                             </div>
                           )}
+                          <ClubRentalTotal
+                            selectedClubs={selectedClubs}
+                            rate={clubRentalRate}
+                            loading={clubRentalRateLoading}
+                          />
                         </div>
                       )}
                     </div>
