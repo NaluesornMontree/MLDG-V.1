@@ -7,6 +7,7 @@ import ReviewManagement from './ReviewManagement';
 import { NavIcon, ResponsiveNavButton } from './DashboardNav';
 import AccountProfileCard from './AccountProfileCard';
 import DashboardHome from './DashboardHome';
+import BillingRequestNotifier from './BillingRequestNotifier';
 import { findUserByPhoneNumber, getDuplicatePhoneMessage, normalizePhoneNumber } from '../utils/userPhoneUtils';
 
 function StaffDashboard({ user, userData, handleLogout, onPasswordResetEmailSent }) {
@@ -130,6 +131,12 @@ function StaffDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
 
       {/* Main Content */}
       <div className="min-w-0 flex-1 p-4 pb-28 md:ml-72 md:p-10 md:pb-10 overflow-y-auto">
+        <BillingRequestNotifier
+          onOpenPayment={(bookingId) => {
+            setCheckoutBookingId(bookingId);
+            setActiveTab('payment');
+          }}
+        />
         <header className="hidden">
           <button onClick={handleLogout} className="shrink-0 text-sm font-bold text-red-500 bg-red-50 px-3 md:px-4 py-2 rounded-xl hover:bg-red-100 transition-all flex items-center gap-2">
             <NavIcon name="logOut" className="w-4 h-4" />

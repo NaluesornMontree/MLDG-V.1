@@ -49,6 +49,7 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
   const [receiptBooking, setReceiptBooking] = useState(null);
   const [receiptPayment, setReceiptPayment] = useState(null);
   const [receiptPaymentLoading, setReceiptPaymentLoading] = useState(false);
+  const [billingRequestLoadingId, setBillingRequestLoadingId] = useState(null);
   const [bookingModifyLimitHours, setBookingModifyLimitHours] = useState(2);
 
   const [reviewRating, setReviewRating] = useState(5);
@@ -462,12 +463,14 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
   const getHistoryStatusLabel = (booking) => {
     const payment = paymentsByBookingId[booking.id];
     if (payment?.status === 'cancelled') return 'ยกเลิกบิล';
+    if (booking.status === 'occupied' && booking.billingRequested) return 'แจ้งคิดเงินแล้ว';
     return getBookingStatusLabel(booking.status);
   };
 
   const getHistoryStatusClass = (booking) => {
     const payment = paymentsByBookingId[booking.id];
     if (payment?.status === 'cancelled') return 'bg-rose-100 text-rose-800';
+    if (booking.status === 'occupied' && booking.billingRequested) return 'bg-emerald-100 text-emerald-800';
     return getBookingStatusClass(booking.status);
   };
 
@@ -840,6 +843,45 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
     fetchMyBookings();
   };
 
+  const canRequestBilling = (booking) => {
+    return booking?.status === 'occupied';
+  };
+
+  const handleRequestBilling = async (booking) => {
+    if (!canRequestBilling(booking) || billingRequestLoadingId) return;
+
+    setBillingRequestLoadingId(booking.id);
+    try {
+      await updateDoc(doc(db, 'bookings', booking.id), {
+        billingRequested: true,
+        Billing_Requested: true,
+        billingRequestedAt: serverTimestamp(),
+        Billing_Requested_At: serverTimestamp(),
+        billingRequestedBy: user.uid,
+        Billing_Requested_By: user.uid,
+        billingRequestedByName: userData?.FullName || userData?.fullName || user?.displayName || user?.email || 'สมาชิก',
+        Billing_Requested_By_Name: userData?.FullName || userData?.fullName || user?.displayName || user?.email || 'สมาชิก'
+      });
+      window.appAlert('แจ้งคิดเงินเรียบร้อยแล้ว พนักงานหรือเจ้าของร้านจะเห็นรายการนี้ในหน้าคิดเงิน');
+      setMyBookings((current) => current.map((item) => (
+        item.id === booking.id
+          ? {
+              ...item,
+              billingRequested: true,
+              Billing_Requested: true,
+              billingRequestedBy: user.uid,
+              Billing_Requested_By: user.uid
+            }
+          : item
+      )));
+    } catch (error) {
+      console.error('Error requesting billing:', error);
+      window.appAlert('ไม่สามารถแจ้งคิดเงินได้ กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setBillingRequestLoadingId(null);
+    }
+  };
+
   const handleSubmitReview = async (e) => {
     e.preventDefault();
     if (!selectedReviewBooking) {
@@ -1099,6 +1141,8 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
                   <tbody className="font-bold text-slate-600 text-xs">
                     {myBookings.map((b) => {
                       const canModify = canModifyBooking(b);
+                      const canAskBilling = canRequestBilling(b);
+                      const billingRequested = b.billingRequested || b.Billing_Requested;
                       return (
                         <tr key={b.id} className="border-b border-slate-100 hover:bg-slate-50/50">
                           <td className="py-4 px-2 text-slate-800">{b.bookingDate}</td>
@@ -1118,6 +1162,20 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
                               >
                                 ตรวจสอบรายละเอียด
                               </button>
+                              {canAskBilling && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRequestBilling(b)}
+                                  disabled={billingRequested || billingRequestLoadingId === b.id}
+                                  className={`rounded-lg border px-3 py-1.5 text-[10px] font-black transition-all ${
+                                    billingRequested
+                                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 cursor-not-allowed'
+                                      : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                  }`}
+                                >
+                                  {billingRequestLoadingId === b.id ? 'กำลังแจ้ง...' : billingRequested ? 'แจ้งคิดเงินแล้ว' : 'แจ้งคิดเงิน'}
+                                </button>
+                              )}
                               {canModify ? (
                                 <>
                                 <button

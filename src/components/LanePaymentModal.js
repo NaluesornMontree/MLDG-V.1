@@ -501,6 +501,10 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
           status: 'completed',
           activeTimeSlots: [],
           activeDetailedSlots: {},
+          billingRequested: false,
+          Billing_Requested: false,
+          billingRequestedAt: null,
+          Billing_Requested_At: null,
           completedAt: new Date().toISOString()
         });
       } else {
@@ -517,6 +521,10 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
           activeTimeSlots: remainingActiveTimeSlots,
           activeDetailedSlots: nextActiveDetailedSlots,
           status: remainingActiveTimeSlots.length > 0 ? 'occupied' : 'confirmed',
+          billingRequested: false,
+          Billing_Requested: false,
+          billingRequestedAt: null,
+          Billing_Requested_At: null,
           updatedAt: new Date().toISOString()
         });
       }

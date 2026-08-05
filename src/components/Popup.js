@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { theme } from '../styles/theme';
 import { AlertIcon, CheckCircleIcon } from './AppIcons';
 
-function Popup({ isOpen, type = 'info', title, message, onConfirm, onCancel }) {
+function Popup({ isOpen, type = 'info', title, message, onConfirm, onCancel, confirmLabel = 'ยืนยัน', cancelLabel = 'ยกเลิก' }) {
   if (!isOpen) return null;
   const s = theme.modal;
   const isDanger = type === 'danger' || type === 'error';
@@ -27,8 +27,8 @@ function Popup({ isOpen, type = 'info', title, message, onConfirm, onCancel }) {
         <h3 className={s.title}>{title}</h3>
         <p className={`${s.message} whitespace-pre-line`}>{message}</p>
         <div className="flex flex-col gap-2">
-          <button onClick={onConfirm} className={s.btnConfirm}>ยืนยัน</button>
-          {onCancel && <button onClick={onCancel} className={s.btnCancel}>ยกเลิก</button>}
+          <button onClick={onConfirm} className={s.btnConfirm}>{confirmLabel}</button>
+          {onCancel && <button onClick={onCancel} className={s.btnCancel}>{cancelLabel}</button>}
         </div>
       </div>
     </div>

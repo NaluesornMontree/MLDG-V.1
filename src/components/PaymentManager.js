@@ -153,7 +153,17 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
     payment.Lane_Code || payment.laneCode || payment.laneNumber
   );
 
+  const isBillingRequested = (booking) => Boolean(booking?.billingRequested || booking?.Billing_Requested);
+
+  const getBillingRequestedLabel = (booking) => {
+    const value = booking?.billingRequestedAt || booking?.Billing_Requested_At;
+    const date = value?.toDate ? value.toDate() : value ? new Date(value) : null;
+    if (!date || Number.isNaN(date.getTime())) return 'ลูกค้าแจ้งคิดเงินแล้ว';
+    return `ลูกค้าแจ้งคิดเงินเมื่อ ${date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`;
+  };
+
   const sortedActiveLanes = [...activeLanes].sort((a, b) => (
+    Number(isBillingRequested(b)) - Number(isBillingRequested(a)) ||
     getBookingLaneSortValue(a) - getBookingLaneSortValue(b) ||
     getBookingLaneLabel(a).localeCompare(getBookingLaneLabel(b), ['th', 'en'], { numeric: true, sensitivity: 'base' })
   ));
@@ -355,12 +365,23 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
           ) : (
             sortedActiveLanes.map((booking) => {
               const laneNumbers = getBookingLaneNumbers(booking);
+              const billingRequested = isBillingRequested(booking);
 
               return (
                 <div
                   key={booking.id}
-                  className="flex h-full min-h-[13.5rem] flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"
+                  className={`flex h-full min-h-[13.5rem] flex-col rounded-2xl border p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
+                    billingRequested
+                      ? 'border-amber-200 bg-amber-50/35 ring-2 ring-amber-100 hover:border-amber-300'
+                      : 'border-slate-200 bg-white hover:border-emerald-200'
+                  }`}
                 >
+                  {billingRequested && (
+                    <div className="mb-3 inline-flex w-fit items-center gap-2 rounded-full border border-amber-200 bg-white px-3 py-1 text-[11px] font-black text-amber-700 shadow-sm">
+                      <span className="h-2 w-2 rounded-full bg-amber-500" />
+                      {getBillingRequestedLabel(booking)}
+                    </div>
+                  )}
                   <div className="flex min-w-0 items-start gap-3">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-emerald-700">
                       <NavIcon name="user" className="h-5 w-5" />
