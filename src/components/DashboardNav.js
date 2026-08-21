@@ -13,6 +13,8 @@ const iconPaths = {
   star: 'M12 3l2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.8 1-6.1-4.4-4.3 6.1-.9z',
   history: 'M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5M12 8v5l3 2',
   logOut: 'M10 17l5-5-5-5M15 12H3M21 4v16',
+  menu: 'M4 7h16M4 12h16M4 17h16',
+  close: 'M6 6l12 12M18 6L6 18',
 };
 
 function NavIcon({ name, className = '' }) {
@@ -32,21 +34,21 @@ function NavIcon({ name, className = '' }) {
   );
 }
 
-function ResponsiveNavButton({ active, icon, label, onClick }) {
+function ResponsiveNavButton({ active, icon, label, onClick, collapsed = false, mobileExpanded = false }) {
   return (
     <button
       type="button"
       onClick={onClick}
       title={label}
       aria-label={label}
-      className={`min-w-[58px] md:min-w-0 md:w-full h-14 md:h-auto px-3 md:px-4 py-2 md:py-3 rounded-2xl font-bold transition-all flex flex-col md:flex-row items-center justify-center md:justify-start gap-1.5 md:gap-3 ${
+      className={`${mobileExpanded ? 'min-w-0 w-full flex-row justify-start gap-3' : 'min-w-[58px] flex-col justify-center gap-1.5'} md:min-w-0 md:w-full h-14 md:h-auto px-3 md:px-4 py-2 md:py-3 rounded-2xl font-bold transition-all flex md:flex-row items-center ${collapsed ? 'md:justify-center md:gap-0' : 'md:justify-start md:gap-3'} ${
         active
           ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/20'
           : 'text-emerald-50/80 hover:bg-emerald-800 hover:text-white'
       }`}
     >
       <NavIcon name={icon} className="w-5 h-5 shrink-0" />
-      <span className="hidden md:inline text-left leading-snug">{label}</span>
+      <span className={`${mobileExpanded ? 'inline' : 'hidden'} ${collapsed ? 'md:hidden' : 'md:inline'} text-left leading-snug`}>{label}</span>
     </button>
   );
 }

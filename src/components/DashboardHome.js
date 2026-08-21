@@ -616,18 +616,18 @@ function OwnerRevenueOverview({
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-600">OWNER REVENUE</div>
           <h3 className="mt-1 text-lg font-black text-slate-900">กราฟรายได้{rangeLabel}</h3>
           <p className="mt-1 text-xs font-bold text-slate-400">สรุปรายได้จากรายการชำระเงินที่ปิดยอดแล้ว และไม่รวมรายการที่ถูกยกเลิกบิล</p>
         </div>
-        <div className="flex flex-col items-end gap-3 lg:ml-auto">
-          <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex w-full flex-col items-stretch gap-3 lg:ml-auto lg:w-auto lg:items-end">
+          <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:justify-end lg:w-auto">
             <select
               value={range}
               onChange={(event) => onRangeChange?.(event.target.value)}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-700 shadow-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-center text-xs font-black text-slate-700 shadow-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50 sm:w-auto sm:text-left"
               aria-label="ช่วงเวลารายงานรายได้"
             >
               <option value="today">วันนี้</option>
@@ -638,7 +638,7 @@ function OwnerRevenueOverview({
             </select>
             {range === 'custom' && (
               <>
-                <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black text-slate-500">
+                <label className="flex items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black text-slate-500">
                   ตั้งแต่
                   <input
                     type="date"
@@ -649,7 +649,7 @@ function OwnerRevenueOverview({
                     aria-label="วันที่เริ่มต้นรายงาน"
                   />
                 </label>
-                <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black text-slate-500">
+                <label className="flex items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black text-slate-500">
                   ถึง
                   <input
                     type="date"
@@ -663,12 +663,12 @@ function OwnerRevenueOverview({
               </>
             )}
             {(range === 'month' || range === 'year') && (
-              <div className="flex flex-wrap justify-end gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
               {range === 'month' && (
                 <select
                   value={month}
                   onChange={(event) => onMonthChange?.(Number(event.target.value))}
-                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50"
+                  className="min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50"
                   aria-label="เลือกเดือนรายงาน"
                 >
                   {MONTH_LABELS_TH.map((label, index) => (
@@ -679,7 +679,7 @@ function OwnerRevenueOverview({
               <select
                 value={year}
                 onChange={(event) => onYearChange?.(Number(event.target.value))}
-                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50"
+                className="min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50"
                 aria-label="เลือกปีรายงาน"
               >
                 {Array.from({ length: 6 }, (_, index) => new Date().getFullYear() - index).map((optionYear) => (
@@ -689,31 +689,31 @@ function OwnerRevenueOverview({
             </div>
             )}
           </div>
-          <div className={`grid grid-cols-1 gap-2 sm:grid-cols-2 ${reportGridColumns}`}>
+          <div className={`grid grid-cols-2 gap-2 sm:grid-cols-2 ${reportGridColumns}`}>
           {showRangeTotal && (
-          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-3 sm:px-4">
             <div className="text-[10px] font-black text-emerald-700">รายได้รวมช่วงที่เลือก</div>
-            <div className="mt-1 text-lg font-black text-emerald-900">{report.yearTotal.toLocaleString()} บาท</div>
+            <div className="mt-1 text-base font-black text-emerald-900 sm:text-lg">{report.yearTotal.toLocaleString()} บาท</div>
            </div>
           )}
-          <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 px-3 py-3 sm:px-4">
             <div className="text-[10px] font-black text-blue-700">เงินสด</div>
-            <div className="mt-1 text-lg font-black text-blue-900">{report.cashTotal.toLocaleString()} บาท</div>
+            <div className="mt-1 text-base font-black text-blue-900 sm:text-lg">{report.cashTotal.toLocaleString()} บาท</div>
           </div>
-          <div className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3">
+          <div className="rounded-2xl border border-violet-100 bg-violet-50 px-3 py-3 sm:px-4">
             <div className="text-[10px] font-black text-violet-700">เงินโอน</div>
-            <div className="mt-1 text-lg font-black text-violet-900">{report.transferTotal.toLocaleString()} บาท</div>
+            <div className="mt-1 text-base font-black text-violet-900 sm:text-lg">{report.transferTotal.toLocaleString()} บาท</div>
            </div>
           {showAverage && (
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3 sm:px-4">
             <div className="text-[10px] font-black text-slate-500">{averageLabel}</div>
-            <div className="mt-1 text-lg font-black text-slate-800">{Math.round(report.yearTotal / averageDivisor).toLocaleString()} บาท</div>
+            <div className="mt-1 text-base font-black text-slate-800 sm:text-lg">{Math.round(report.yearTotal / averageDivisor).toLocaleString()} บาท</div>
            </div>
           )}
           {showBestMonth && (
-          <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
+          <div className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-3 sm:px-4">
             <div className="text-[10px] font-black text-amber-700">เดือนสูงสุด</div>
-            <div className="mt-1 text-lg font-black text-amber-900">{report.bestMonth.label} {report.bestMonth.total.toLocaleString()} บาท</div>
+            <div className="mt-1 text-base font-black text-amber-900 sm:text-lg">{report.bestMonth.label} {report.bestMonth.total.toLocaleString()} บาท</div>
            </div>
           )}
           </div>
@@ -721,41 +721,41 @@ function OwnerRevenueOverview({
       </div>
 
       {isDonut ? (
-        <div className="flex flex-col items-center justify-center gap-5 rounded-3xl border border-slate-100 bg-slate-50 px-5 py-8 sm:flex-row sm:gap-10">
+        <div className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-slate-100 bg-slate-50 px-4 py-5 sm:flex-row sm:gap-10 sm:px-5 sm:py-8">
           <div
-            className="relative flex h-48 w-48 shrink-0 items-center justify-center rounded-full"
+            className="relative flex h-40 w-40 shrink-0 items-center justify-center rounded-full sm:h-48 sm:w-48"
             style={{ background: `conic-gradient(#60a5fa 0 ${cashPercent}%, #a78bfa ${cashPercent}% 100%)` }}
           >
-            <div className="flex h-32 w-32 flex-col items-center justify-center rounded-full bg-white text-center shadow-inner">
+            <div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white text-center shadow-inner sm:h-32 sm:w-32">
               <span className="text-[11px] font-black text-slate-400">ยอดรวม</span>
-              <span className="mt-1 text-xl font-black text-slate-900">{report.yearTotal.toLocaleString()}</span>
+              <span className="mt-1 text-lg font-black text-slate-900 sm:text-xl">{report.yearTotal.toLocaleString()}</span>
               <span className="text-[11px] font-bold text-slate-400">บาท</span>
             </div>
           </div>
-          <div className="grid w-full max-w-sm gap-3">
-            <div className="flex items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
-              <span className="flex items-center gap-2 text-sm font-black text-blue-800"><span className="h-3 w-3 rounded-full bg-blue-400" />เงินสด</span>
-              <span className="text-sm font-black text-blue-900">{report.cashTotal.toLocaleString()} บาท</span>
+          <div className="grid w-full max-w-sm gap-2 sm:gap-3">
+            <div className="flex items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2.5 sm:px-4 sm:py-3">
+              <span className="flex items-center gap-2 text-xs font-black text-blue-800 sm:text-sm"><span className="h-2.5 w-2.5 rounded-full bg-blue-400 sm:h-3 sm:w-3" />เงินสด</span>
+              <span className="text-xs font-black text-blue-900 sm:text-sm">{report.cashTotal.toLocaleString()} บาท</span>
             </div>
-            <div className="flex items-center justify-between rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3">
-              <span className="flex items-center gap-2 text-sm font-black text-violet-800"><span className="h-3 w-3 rounded-full bg-violet-400" />เงินโอน</span>
-              <span className="text-sm font-black text-violet-900">{report.transferTotal.toLocaleString()} บาท</span>
+            <div className="flex items-center justify-between rounded-2xl border border-violet-100 bg-violet-50 px-3 py-2.5 sm:px-4 sm:py-3">
+              <span className="flex items-center gap-2 text-xs font-black text-violet-800 sm:text-sm"><span className="h-2.5 w-2.5 rounded-full bg-violet-400 sm:h-3 sm:w-3" />เงินโอน</span>
+              <span className="text-xs font-black text-violet-900 sm:text-sm">{report.transferTotal.toLocaleString()} บาท</span>
             </div>
           </div>
         </div>
       ) : (
-        <div className={`grid items-end gap-2 overflow-x-auto rounded-3xl border border-slate-100 bg-slate-50 px-3 pb-4 pt-6 sm:gap-3 sm:px-5 ${range === 'year' ? 'grid-cols-12' : 'grid-cols-7'}`}>
+        <div className={`grid min-w-full items-end gap-2 overflow-x-auto rounded-3xl border border-slate-100 bg-slate-50 px-3 pb-4 pt-5 sm:gap-3 sm:px-5 sm:pt-6 ${range === 'year' ? 'grid-cols-12' : 'grid-cols-7'}`}>
           {chartData.map((item) => (
             <div key={item.key || item.label} className="flex min-w-0 flex-col items-center gap-2">
-              <div className="flex h-40 w-full items-end justify-center gap-1">
+              <div className="flex h-28 w-full items-end justify-center gap-1 sm:h-40">
                 <div
                   className="w-full max-w-4 rounded-t-lg border border-blue-200 bg-blue-400/80 transition-all"
-                  style={{ height: `${Math.max(item.cash ? 8 : 0, Math.round((item.cash / maxChartTotal) * 150))}px` }}
+                  style={{ height: `${Math.max(item.cash ? 8 : 0, Math.round((item.cash / maxChartTotal) * 110))}px` }}
                   title={`${item.label} เงินสด: ${item.cash.toLocaleString()} บาท`}
                 />
                 <div
                   className="w-full max-w-4 rounded-t-lg border border-violet-200 bg-violet-400/80 transition-all"
-                  style={{ height: `${Math.max(item.transfer ? 8 : 0, Math.round((item.transfer / maxChartTotal) * 150))}px` }}
+                  style={{ height: `${Math.max(item.transfer ? 8 : 0, Math.round((item.transfer / maxChartTotal) * 110))}px` }}
                   title={`${item.label} เงินโอน: ${item.transfer.toLocaleString()} บาท`}
                 />
               </div>

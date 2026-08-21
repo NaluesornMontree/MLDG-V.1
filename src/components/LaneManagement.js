@@ -1249,13 +1249,14 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
       {loading ? (
         <div className="text-center py-20 font-black text-slate-400 tracking-widest animate-pulse">กำลังจัดระเบียบตารางพิกัดเวลา...</div>
       ) : (
-        <div className="border border-slate-200 rounded-2xl bg-white shadow-sm overflow-x-auto">
-          <table className="w-full min-w-[1000px] border-collapse text-center">
+        <div className="-mx-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:mx-0">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] border-collapse text-center sm:min-w-[1000px]">
             <thead>
               <tr className="bg-slate-100 border-b border-slate-200">
-                <th className="p-4 font-black text-slate-700 bg-slate-200 sticky left-0 z-10 w-28 border-r">เลนซ้อม</th>
+                <th className="sticky left-0 z-20 w-[96px] min-w-[96px] border-r bg-slate-200 px-3 py-3 text-xs font-black text-slate-700 shadow-[4px_0_12px_rgba(15,23,42,0.06)] sm:w-28 sm:min-w-28 sm:p-4 sm:text-sm whitespace-nowrap">เลนซ้อม</th>
                 {TIME_SLOTS.map(slot => (
-                  <th key={slot} className="p-3 text-xs font-black text-slate-600 border-r min-w-[90px]">{slot}</th>
+                  <th key={slot} className="min-w-[74px] border-r px-2 py-3 text-[10px] font-black text-slate-600 sm:min-w-[90px] sm:p-3 sm:text-xs whitespace-nowrap">{slot}</th>
                 ))}
               </tr>
             </thead>
@@ -1266,7 +1267,7 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
 
                 return (
                   <tr key={laneNum} className="border-b border-slate-100 hover:bg-slate-50/60">
-                    <td className="p-3 font-extrabold text-slate-800 bg-slate-50 sticky left-0 z-10 border-r shadow-sm">เลน {laneNum}</td>
+                    <td className="sticky left-0 z-20 w-[96px] min-w-[96px] border-r bg-slate-50 px-3 py-2.5 text-sm font-extrabold text-slate-800 shadow-[4px_0_12px_rgba(15,23,42,0.05)] sm:w-28 sm:min-w-28 sm:p-3 sm:text-base whitespace-nowrap">เลน {laneNum}</td>
                     {TIME_SLOTS.map((slot, index) => {
                       const cell = getCellStatus(laneNum, slot);
                       const isSelecting = currentLaneSlots.includes(slot); 
@@ -1326,7 +1327,7 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
                           }}
                           onMouseEnter={() => handleCellMouseEnter(laneNum, slot)}
                           onMouseUp={() => setDragSelection(null)}
-                          className={`p-3 text-xs transition-all select-none ${cellStyle}`}
+                          className={`h-14 px-2 py-2 text-[11px] transition-all select-none sm:h-16 sm:p-3 sm:text-xs ${cellStyle}`}
                         >
                           {isShopClosed ? (
                             'X'
@@ -1349,6 +1350,7 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

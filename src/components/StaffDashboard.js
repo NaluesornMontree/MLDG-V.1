@@ -15,6 +15,8 @@ function StaffDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
   const [checkoutBookingId, setCheckoutBookingId] = useState(null);
   const [profileForm, setProfileForm] = useState({ FullName: '', PhoneNumber: '' });
   const [updatingProfile, setUpdatingProfile] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (userData) {
@@ -63,9 +65,9 @@ function StaffDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
     <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans">
       {/* Sidebar */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-50 overflow-hidden bg-emerald-950 text-white p-2 shadow-2xl border-t border-emerald-800/70 md:inset-y-0 md:right-auto md:h-dvh md:w-72 md:shrink-0 md:overflow-y-auto md:p-6 md:border-t-0 md:flex md:flex-col md:justify-between"
+        className={`fixed bottom-0 left-0 right-0 z-50 ${mobileMenuOpen ? 'max-h-[82dvh] overflow-y-auto' : 'overflow-hidden'} bg-emerald-950 text-white p-2 shadow-2xl border-t border-emerald-800/70 transition-all duration-300 md:inset-y-0 md:right-auto md:h-dvh md:max-h-none md:shrink-0 md:overflow-y-auto md:p-5 md:border-t-0 md:flex md:flex-col md:justify-between ${sidebarCollapsed ? 'md:w-24' : 'md:w-72'}`}
         style={{
-          backgroundImage: "linear-gradient(to bottom, rgba(2,44,34,0.88), rgba(2,44,34,0.72), rgba(2,44,34,0.84)), url('/sidebar-cover.jpg')",
+          backgroundImage: "linear-gradient(to bottom, rgba(2,44,34,0.88), rgba(2,44,34,0.72), rgba(2,44,34,0.84)), url('/sidebar-cover-v2.jpg')",
           backgroundSize: '100% 100%',
           backgroundPosition: 'top center',
           backgroundRepeat: 'no-repeat',
@@ -73,23 +75,51 @@ function StaffDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
         }}
       >
         <div className="relative z-10">
-          <h2 className="hidden md:flex mb-5 rounded-2xl border border-cyan-300/30 bg-cyan-600/25 px-4 py-3 text-lg font-black tracking-wide text-white shadow-sm shadow-cyan-950/20">
-            MLG Staff
-          </h2>
-          <div className="hidden md:block mb-6 p-4 bg-emerald-950/40 rounded-2xl border border-emerald-800/50">
+          <div className={`hidden md:flex mb-5 items-center gap-2 ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+            {!sidebarCollapsed && (
+              <h2 className="min-w-0 flex-1 rounded-2xl border border-cyan-300/30 bg-cyan-600/25 px-4 py-3 text-lg font-black tracking-wide text-white shadow-sm shadow-cyan-950/20">
+                MLG Staff
+              </h2>
+            )}
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((value) => !value)}
+              title={sidebarCollapsed ? 'แสดงชื่อเมนู' : 'ซ่อนชื่อเมนู'}
+              aria-label={sidebarCollapsed ? 'แสดงชื่อเมนู' : 'ซ่อนชื่อเมนู'}
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white transition-all hover:bg-white/20"
+            >
+              <NavIcon name="menu" className="h-5 w-5" />
+            </button>
+          </div>
+          <div className={`${sidebarCollapsed ? 'md:hidden' : 'md:block'} hidden mb-6 p-4 bg-emerald-950/40 rounded-2xl border border-emerald-800/50`}>
             <div className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">ผู้เข้าใช้งาน</div>
             <div className="text-sm font-black truncate mt-1">{userData?.FullName || 'พนักงาน'}</div>
             <div className="text-[10px] text-slate-400 truncate">{user?.email}</div>
           </div>
 
-          <nav className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-1 md:pb-0">
+          <nav className={`${mobileMenuOpen ? 'grid grid-cols-1 gap-2 pb-2' : 'flex gap-2 overflow-x-auto pb-1'} md:flex md:flex-col md:overflow-visible md:pb-0`}>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((value) => !value)}
+              title={mobileMenuOpen ? 'ปิดเมนู' : 'เปิดเมนู'}
+              aria-label={mobileMenuOpen ? 'ปิดเมนู' : 'เปิดเมนู'}
+              className={`${mobileMenuOpen ? 'w-full flex-row justify-start gap-3' : 'min-w-[58px] flex-col justify-center gap-1.5'} flex h-14 items-center rounded-2xl bg-white/10 px-3 py-2 font-bold text-white transition-all hover:bg-white/20 md:hidden`}
+            >
+              <NavIcon name={mobileMenuOpen ? 'close' : 'menu'} className="h-5 w-5 shrink-0" />
+              {mobileMenuOpen && <span>เมนูทั้งหมด</span>}
+            </button>
             {navItems.map((item) => (
               <ResponsiveNavButton
                 key={item.id}
                 active={activeTab === item.id}
                 icon={item.icon}
                 label={item.label}
-                onClick={() => setActiveTab(item.id)}
+                collapsed={sidebarCollapsed}
+                mobileExpanded={mobileMenuOpen}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setMobileMenuOpen(false);
+                }}
               />
             ))}
             <button
@@ -97,9 +127,10 @@ function StaffDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
               onClick={handleLogout}
               title="ออกจากระบบ"
               aria-label="ออกจากระบบ"
-              className="flex h-14 min-w-[58px] flex-col items-center justify-center gap-1.5 rounded-2xl px-3 py-2 font-bold text-rose-100 transition-all hover:bg-rose-900/40 hover:text-white md:hidden"
+              className={`${mobileMenuOpen ? 'w-full flex-row justify-start gap-3' : 'min-w-[58px] flex-col justify-center gap-1.5'} flex h-14 items-center rounded-2xl px-3 py-2 font-bold text-rose-100 transition-all hover:bg-rose-900/40 hover:text-white md:hidden`}
             >
               <NavIcon name="logOut" className="h-5 w-5 shrink-0" />
+              {mobileMenuOpen && <span>ออกจากระบบ</span>}
             </button>
           </nav>
 
@@ -124,13 +155,13 @@ function StaffDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
             className="flex w-full items-center gap-3 rounded-2xl border border-rose-200/10 bg-rose-50/10 px-4 py-3 text-left text-sm font-black text-rose-100 transition-all hover:bg-rose-500/20 hover:text-white"
           >
             <NavIcon name="logOut" className="h-5 w-5 shrink-0" />
-            <span>ออกจากระบบ</span>
+            {!sidebarCollapsed && <span>ออกจากระบบ</span>}
           </button>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="min-w-0 flex-1 p-4 pb-28 md:ml-72 md:p-10 md:pb-10 overflow-y-auto">
+      <div className={`min-w-0 flex-1 p-4 ${mobileMenuOpen ? 'pb-[24rem]' : 'pb-28'} transition-all duration-300 md:p-10 md:pb-10 overflow-y-auto ${sidebarCollapsed ? 'md:ml-24' : 'md:ml-72'}`}>
         <BillingRequestNotifier
           onOpenPayment={(bookingId) => {
             setCheckoutBookingId(bookingId);
