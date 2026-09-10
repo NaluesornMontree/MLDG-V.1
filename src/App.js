@@ -375,7 +375,7 @@ function AppContent() {
     }));
 
     try {
-      await sendPasswordResetEmail(auth, passwordResetPopup.email);
+      await sendPasswordResetEmail(auth, passwordResetPopup.email, getEmailActionCodeSettings());
       setPasswordResetPopup((current) => ({
         ...current,
         sending: false,

@@ -14,16 +14,36 @@ const getCheckoutTarget = (value) => (
     : { bookingId: value }
 );
 
+const getLocalDateInputValue = (date = new Date()) => {
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - (offset * 60 * 1000)).toISOString().split('T')[0];
+};
+
+const getTimestampForSelectedDate = (dateValue) => {
+  if (!dateValue) return null;
+  const [year, month, day] = dateValue.split('-').map(Number);
+  if (![year, month, day].every(Number.isFinite)) return null;
+
+  const now = new Date();
+  return Timestamp.fromDate(new Date(
+    year,
+    month - 1,
+    day,
+    now.getHours(),
+    now.getMinutes(),
+    now.getSeconds(),
+    now.getMilliseconds()
+  ));
+};
+
 function PaymentManager({ user = null, userData = null, initialBookingId = null, onInitialBookingHandled = null }) {
   const [activeLanes, setActiveLanes] = useState([]);
   const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [clubInventory, setClubInventory] = useState([]);
   const [historyDate, setHistoryDate] = useState(() => {
-    const today = new Date();
-    const offset = today.getTimezoneOffset();
-    return new Date(today.getTime() - (offset * 60 * 1000)).toISOString().split('T')[0];
+    return getLocalDateInputValue();
   });
+  const [paymentRecordDate, setPaymentRecordDate] = useState(() => getLocalDateInputValue());
 
   // เรตราคากลางจากฐานข้อมูล service_settings
   const [clubPriceRate, setClubPriceRate] = useState(20); 
@@ -40,6 +60,11 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
   const [voidReason, setVoidReason] = useState('');
   const [voidReasonError, setVoidReasonError] = useState('');
   const [alertPopup, setAlertPopup] = useState({ isOpen: false, type: 'info', title: '', message: '', onConfirm: null });
+  const todayInputValue = getLocalDateInputValue();
+  const rawUserRole = String(userData?.Role || userData?.role || '').trim().toLowerCase();
+  const isOwner = rawUserRole === 'owner';
+  const selectedPaymentTimestamp = isOwner ? getTimestampForSelectedDate(paymentRecordDate) : null;
+  const isBackdatedPayment = isOwner && paymentRecordDate !== todayInputValue;
 
   const historyDateLabel = new Date(`${historyDate}T00:00:00`).toLocaleDateString('th-TH', {
     day: 'numeric',
@@ -179,11 +204,20 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
     getPaymentLaneSortValue(a) - getPaymentLaneSortValue(b)
   ));
 
+  const handlePaymentRecordDateChange = (event) => {
+    const nextDate = event.target.value;
+    if (!nextDate) {
+      setPaymentRecordDate(todayInputValue);
+      return;
+    }
+
+    setPaymentRecordDate(nextDate > todayInputValue ? todayInputValue : nextDate);
+  };
+
   useEffect(() => {
     // 1. ดึงข้อมูลเลนที่กำลังใช้งานอยู่จริง
     const unsubscribeBookings = onSnapshot(query(collection(db, 'bookings'), where('status', '==', 'occupied')), (snapshot) => {
       setActiveLanes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
     });
 
     // 3. ดึงราคากลางจาก service_settings
@@ -340,11 +374,36 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
 
   return (
     <div className="w-full max-w-[1600px] mx-auto rounded-[1.75rem] border border-slate-200 bg-white p-5 font-sans text-slate-800 shadow-sm relative select-none sm:p-8">
-      <div className="border-b border-slate-100 pb-4 mb-6 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+      <div className="border-b border-slate-100 pb-4 mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <h1 className="text-xl sm:text-2xl font-black text-slate-800 leading-tight">คิดเงินและจัดการรายได้</h1>
-        <button onClick={() => setIsOtherIncomeModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2.5 rounded-xl shadow text-sm transition-all w-full sm:w-auto">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+          {isOwner && (
+            <label className="flex w-full flex-col gap-1 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-3 py-2 text-left shadow-sm sm:w-auto sm:min-w-[260px]">
+              <span className="flex items-center justify-between gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-emerald-700">
+                วันที่บันทึกบิล
+                <span className="rounded-full bg-white px-2 py-0.5 text-[10px] text-emerald-700">OWNER</span>
+              </span>
+              <div className="flex items-center gap-2">
+                <NavIcon name="calendar" className="h-4 w-4 shrink-0 text-emerald-700" />
+                <input
+                  type="date"
+                  value={paymentRecordDate}
+                  max={todayInputValue}
+                  onChange={handlePaymentRecordDateChange}
+                  className="min-w-0 flex-1 bg-transparent text-sm font-extrabold text-slate-800 outline-none"
+                />
+              </div>
+              {isBackdatedPayment && (
+                <span className="text-[10px] font-bold text-amber-700">
+                  บิลที่จะบันทึกจะถูกลงวันที่ย้อนหลังตามวันที่เลือก
+                </span>
+              )}
+            </label>
+          )}
+          <button onClick={() => setIsOtherIncomeModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2.5 rounded-xl shadow text-sm transition-all w-full sm:w-auto">
           เพิ่มข้อมูลรายได้ใหม่
-        </button>
+          </button>
+        </div>
       </div>
 
       {/* ลิสต์เลนซ้อมที่กำลังใช้งาน */}
@@ -568,6 +627,9 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
           booking={selectedBooking} onClose={() => setIsModalOpen(false)} 
           rates={{ club: clubPriceRate, ball: ballPriceRate, penalty: penaltyPriceRate }} setAlert={setAlertPopup}
           cashierInfo={cashierInfo}
+          paymentDate={selectedPaymentTimestamp}
+          paymentRecordDate={isOwner ? paymentRecordDate : ''}
+          isBackdatedPayment={isBackdatedPayment}
         />
       )}
       {isOtherIncomeModalOpen && (
@@ -575,6 +637,9 @@ function PaymentManager({ user = null, userData = null, initialBookingId = null,
           isOpen={isOtherIncomeModalOpen} onClose={() => setIsOtherIncomeModalOpen(false)} 
           clubInventory={clubInventory} setAlert={setAlertPopup}
           cashierInfo={cashierInfo}
+          paymentDate={selectedPaymentTimestamp}
+          paymentRecordDate={isOwner ? paymentRecordDate : ''}
+          isBackdatedPayment={isBackdatedPayment}
         />
       )}
       <ReceiptDetailsModal

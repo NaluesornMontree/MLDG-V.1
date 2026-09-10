@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { auth } from '../firebase'; // ตรวจสอบ path ให้ตรงกับที่ระบุใน App.js
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { getFirebaseAuthErrorMessage } from '../utils/firebaseErrorMessages';
+import { getEmailActionCodeSettings } from '../utils/emailActionUtils';
 
 export default function ForgotPassword({ onBackToLogin }) {
   const [email, setEmail] = useState('');
@@ -23,7 +24,7 @@ export default function ForgotPassword({ onBackToLogin }) {
       setLoading(true);
 
       // เรียกใช้ฟังก์ชันของ Firebase ส่งลิงก์เข้าอีเมลลูกค้า/พนักงาน
-      await sendPasswordResetEmail(auth, email);
+      await sendPasswordResetEmail(auth, email, getEmailActionCodeSettings());
       
       setMessage('ระบบได้ส่งลิงก์สำหรับรีเซ็ตรหัสผ่านไปยังอีเมลของคุณแล้ว กรุณาตรวจสอบในกล่องข้อความหรืออีเมลขยะ (Spam) ครับ');
       setEmail(''); // เคลียร์ช่องกรอกข้อมูล

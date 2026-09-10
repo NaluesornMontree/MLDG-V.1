@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { db } from '../firebase';
 // เพิ่ม query และ where เพื่อคัดกรองประวัติการเช่าไม้ตามวันที่เลือกดู
 import { collection, getDocs, doc, updateDoc, addDoc, query, where } from "firebase/firestore";
@@ -35,7 +35,7 @@ function ClubManagement() {
   const m = theme.modal;
 
   // ปรับปรุงฟังก์ชันการโหลดและคำนวณจำนวนไม้กอล์ฟว่างให้ผันแปรตามวันที่เลือก
-  const fetchClubsAndCalculateAvail = async () => {
+  const fetchClubsAndCalculateAvail = useCallback(async () => {
     try {
       // 1. ดึงข้อมูลไม้กอล์ฟทั้งหมดจากฐานข้อมูลหลัก
       const clubSnap = await getDocs(collection(db, "golf_clubs"));
@@ -79,12 +79,12 @@ function ClubManagement() {
     } catch (err) {
       console.error("Error fetching or processing clubs inventory:", err);
     }
-  };
+  }, [selectedDate]);
 
   // ให้ระบบโหลดข้อมูลใหม่ทุกครั้งที่แอดมินทำการสลับปฏิทินดูวันที่
   useEffect(() => { 
     fetchClubsAndCalculateAvail(); 
-  }, [selectedDate]);
+  }, [fetchClubsAndCalculateAvail]);
 
   const handleAddClub = async () => {
     if (!newClub.Club_Name) return;

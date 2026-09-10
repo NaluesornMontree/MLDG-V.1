@@ -1,7 +1,6 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { db } from '../firebase'; 
 import { collection, getDocs, setDoc, doc, updateDoc, query, where, Timestamp, deleteDoc, addDoc, onSnapshot } from "firebase/firestore"; 
-import { theme } from '../styles/theme';
 import Popup from './Popup'; 
 import BookingDetailModal from './BookingDetailModal'; 
 import { CheckIcon, GolfIcon, UserIcon, WrenchIcon } from './AppIcons';

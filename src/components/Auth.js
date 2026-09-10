@@ -161,7 +161,7 @@ function Auth() {
   const handleForgot = async (e) => {
     e.preventDefault();
     try {
-      await sendPasswordResetEmail(auth, email);
+      await sendPasswordResetEmail(auth, email, getEmailActionCodeSettings());
       window.appAlert("ส่งลิงก์รีเซ็ตรหัสผ่านไปที่อีเมลแล้ว");
       setMode('login');
     } catch (err) {

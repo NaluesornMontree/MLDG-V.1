@@ -40,10 +40,6 @@ function isClubRentalService(serviceName = '') {
   return serviceName.includes('ไม้กอล์ฟ') || serviceName.includes('Club');
 }
 
-function isBallService(serviceName = '') {
-  return serviceName.includes('ลูกกอล์ฟ') || serviceName.includes('ถาด') || serviceName.includes('Ball');
-}
-
 function getServiceUnit(service = {}) {
   return service.Service_Unit || service.Unit || service.unit || 'หน่วย';
 }
@@ -155,7 +151,15 @@ function getContiguousSlots(booking, laneKey, focusedSlot) {
 
 const formatPoints = (value) => toWholeNumber(value).toLocaleString();
 
-function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
+function LanePaymentModal({
+  booking,
+  onClose,
+  setAlert,
+  cashierInfo = null,
+  paymentDate = null,
+  paymentRecordDate = '',
+  isBackdatedPayment = false
+}) {
   const [services, setServices] = useState([]);
   const [quantities, setQuantities] = useState({});
   const [usedPoints, setUsedPoints] = useState(0);
@@ -257,11 +261,6 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
 
           if (isClubRentalService(serviceName)) {
             initialQuantities[service.id] = booking?.needsClubRent ? totalRentedClubQty : 0;
-            return;
-          }
-
-          if (isBallService(serviceName)) {
-            initialQuantities[service.id] = 1;
             return;
           }
 
@@ -436,7 +435,10 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
         Booking_Type: booking.bookingType || 'walk-in',
         Needs_Instructor: Boolean(booking.needsInstructor),
         Needs_Club_Rent: Boolean(booking.needsClubRent),
-        Payment_Date: serverTimestamp(),
+        Payment_Date: paymentDate || serverTimestamp(),
+        Recorded_At: serverTimestamp(),
+        Payment_Record_Date: paymentRecordDate || '',
+        Is_Backdated_Payment: Boolean(isBackdatedPayment),
         Cashier_ID: cashierInfo?.id || '',
         Cashier_Name: cashierInfo?.name || 'ไม่ระบุชื่อผู้รับชำระ',
         Cashier_Role: cashierInfo?.role || '',
@@ -559,6 +561,11 @@ function LanePaymentModal({ booking, onClose, setAlert, cashierInfo = null }) {
             ใบสรุปรายการและคิดเงินรับชำระ
           </h2>
           <p className="mt-1 text-xs font-mono text-slate-400">ID อ้างอิงระบบ: {booking.id}</p>
+          {isBackdatedPayment && (
+            <div className="mt-3 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700">
+              บันทึกบิลย้อนหลังวันที่ {paymentRecordDate}
+            </div>
+          )}
         </div>
 
         <div className="mb-4 rounded-2xl border border-slate-200/60 bg-slate-50 p-3 sm:mb-6 sm:p-5">

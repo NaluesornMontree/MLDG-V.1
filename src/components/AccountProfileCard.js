@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../firebase';
 import { toWholeNumber } from '../utils/numberUtils';
+import { getEmailActionCodeSettings } from '../utils/emailActionUtils';
 
 function getInitials(name = '', fallback = 'US') {
   const initials = name
@@ -46,7 +47,7 @@ function AccountProfileCard({
     setPasswordEmailError('');
 
     try {
-      await sendPasswordResetEmail(auth, email);
+      await sendPasswordResetEmail(auth, email, getEmailActionCodeSettings());
       setPasswordEmailSent(true);
       setPasswordEmailError('');
       onPasswordResetEmailSent?.(email);

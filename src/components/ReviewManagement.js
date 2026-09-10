@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, doc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { theme } from '../styles/theme';
 import Popup from './Popup';
 
 function ReviewManagement({ publicView = false, canManageReviews = false }) {
@@ -23,17 +22,46 @@ function ReviewManagement({ publicView = false, canManageReviews = false }) {
     onCancel: null
   });
 
-  const s = theme.admin;
-
-  const getReviewRating = (review) => Number(review.rating ?? review.Rating ?? 0);
+  const getReviewRating = useCallback((review) => Number(review.rating ?? review.Rating ?? 0), []);
   const getReviewComment = (review) => review.comment || review.Comment || '';
   const getReviewCustomerName = (review) => review.customerName || review.Customer_Name || 'ไม่ระบุชื่อ';
-  const getReviewDate = (review) => {
+  const getReviewDate = useCallback((review) => {
     const value = review.createdAt || review.Review_Date || review.reviewDate;
     if (!value) return null;
     const date = value?.toDate ? value.toDate() : new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
-  };
+  }, []);
+
+  // ฟังก์ชันคำนวณค่าสถิติคะแนนเฉลี่ยภายในระบบ
+  const calculateStats = useCallback((reviewList) => {
+    if (reviewList.length === 0) {
+      setSummaryStats({
+        averageRating: 0,
+        totalReviews: 0,
+        ratingDistribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
+      });
+      return;
+    }
+
+    const total = reviewList.length;
+    let sum = 0;
+    const distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+
+    reviewList.forEach(rev => {
+      const rawRating = getReviewRating(rev);
+      const rating = Math.round(rawRating) || 5;
+      sum += rawRating;
+      if (distribution[rating] !== undefined) {
+        distribution[rating] += 1;
+      }
+    });
+
+    setSummaryStats({
+      averageRating: (sum / total).toFixed(1),
+      totalReviews: total,
+      ratingDistribution: distribution
+    });
+  }, [getReviewRating]);
 
   useEffect(() => {
     // ดึงข้อมูลคะแนนและความคิดเห็นแบบ realtime และเรียงลำดับจากล่าสุดลงไป
@@ -66,38 +94,7 @@ function ReviewManagement({ publicView = false, canManageReviews = false }) {
     });
 
     return () => unsubscribe();
-  }, []);
-
-  // ฟังก์ชันคำนวณค่าสถิติคะแนนเฉลี่ยภายในระบบ
-  const calculateStats = (reviewList) => {
-    if (reviewList.length === 0) {
-      setSummaryStats({
-        averageRating: 0,
-        totalReviews: 0,
-        ratingDistribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
-      });
-      return;
-    }
-
-    const total = reviewList.length;
-    let sum = 0;
-    const distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
-
-    reviewList.forEach(rev => {
-      const rawRating = getReviewRating(rev);
-      const rating = Math.round(rawRating) || 5;
-      sum += rawRating;
-      if (distribution[rating] !== undefined) {
-        distribution[rating] += 1;
-      }
-    });
-
-    setSummaryStats({
-      averageRating: (sum / total).toFixed(1),
-      totalReviews: total,
-      ratingDistribution: distribution
-    });
-  };
+  }, [calculateStats, getReviewDate]);
 
   // ฟังก์ชันลบคะแนนและความคิดเห็น (กรองสแปม)
   const handleDeleteReview = (id, customerName) => {

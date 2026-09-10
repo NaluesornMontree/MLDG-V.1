@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc, updateDoc, increment, onSnapshot } from 'firebase/firestore';
 import { CheckIcon, UserIcon } from './AppIcons';
@@ -24,7 +24,15 @@ function isInstructorService(serviceName = '') {
   return serviceName.includes('ผู้สอน') || serviceName.includes('Instructor');
 }
 
-function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
+function OtherIncomeModal({
+  isOpen,
+  onClose,
+  setAlert,
+  cashierInfo = null,
+  paymentDate = null,
+  paymentRecordDate = '',
+  isBackdatedPayment = false
+}) {
   const { clubRentalRate, clubRentalRateLoading } = useClubRentalRate();
   const [customerForm, setCustomerForm] = useState({
     customerName: '',
@@ -178,7 +186,10 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
     applySlotSelection(laneNum, slot, dragSelection.shouldSelect);
   };
 
-  const getSlotsCount = () => Object.values(manualSelectedSlots).reduce((acc, curr) => acc + curr.length, 0);
+  const getSlotsCount = useCallback(
+    () => Object.values(manualSelectedSlots).reduce((acc, curr) => acc + curr.length, 0),
+    [manualSelectedSlots]
+  );
 
   // ระบบคำนวณสล็อตเวลาสัมพันธ์กับค่าบริการเลนอัตโนมัติ
   useEffect(() => {
@@ -201,7 +212,7 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
       });
       return updated;
     });
-  }, [manualSelectedSlots, services, needsInstructor, needsClubRent, selectedClubs]);
+  }, [getSlotsCount, services, needsInstructor, needsClubRent, selectedClubs]);
 
   const findMemberByEmail = async (email) => {
     const trimmedEmail = String(email || '').trim();
@@ -482,7 +493,10 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
         Needs_Instructor: needsInstructor,
         Needs_Club_Rent: needsClubRent,
         Description: customerForm.description.trim(), // บันทึกหมายเหตุลงฐานข้อมูล
-        Payment_Date: serverTimestamp(),
+        Payment_Date: paymentDate || serverTimestamp(),
+        Recorded_At: serverTimestamp(),
+        Payment_Record_Date: paymentRecordDate || '',
+        Is_Backdated_Payment: Boolean(isBackdatedPayment),
         Cashier_ID: cashierInfo?.id || '',
         Cashier_Name: cashierInfo?.name || 'ไม่ระบุชื่อผู้รับชำระ',
         Cashier_Role: cashierInfo?.role || '',
@@ -543,6 +557,11 @@ function OtherIncomeModal({ isOpen, onClose, setAlert, cashierInfo = null }) {
           <div>
             <h3 className="text-xl font-black text-slate-800">เพิ่มข้อมูลรายได้ใหม่</h3>
             <p className="text-xs text-slate-400 mt-0.5">ระบุข้อมูลผู้ใช้บริการ เลือกช่องเวลาตาราง หรือคลิกเลือกสินค้าเพื่อคำนวณเงินสด/โอนสุทธิ</p>
+            {isBackdatedPayment && (
+              <div className="mt-2 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700">
+                บันทึกรายได้ย้อนหลังวันที่ {paymentRecordDate}
+              </div>
+            )}
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
         </div>

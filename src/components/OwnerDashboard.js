@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase'; 
 import { doc, updateDoc } from 'firebase/firestore';
-import { theme } from '../styles/theme';
 import StaffManagement from './StaffManagement';
 import ClubManagement from './ClubManagement';
 import CustomerManagement from './CustomerManagement'; 
@@ -18,9 +17,6 @@ import BillingRequestNotifier from './BillingRequestNotifier';
 import { findUserByPhoneNumber, getDuplicatePhoneMessage, normalizePhoneNumber } from '../utils/userPhoneUtils';
 
 function OwnerDashboard({ user, userData, handleLogout, onPasswordResetEmailSent }) { 
-  const rawRole = userData?.Role || userData?.role || '';
-  const role = rawRole.trim().toLowerCase();
-
   const [activeTab, setActiveTab] = useState('dashboard');
   const [checkoutBookingId, setCheckoutBookingId] = useState(null);
   const [profileForm, setProfileForm] = useState({ FullName: '', PhoneNumber: '' });

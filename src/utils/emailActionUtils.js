@@ -10,13 +10,13 @@ const EMAIL_ACTION_QUERY_KEYS = [
 
 export function getApplicationUrl() {
   if (typeof window === 'undefined') return '';
-  return `${window.location.origin}${window.location.pathname}`;
+  return window.location.origin;
 }
 
 export function getEmailActionCodeSettings() {
   return {
     url: getApplicationUrl(),
-    handleCodeInApp: false
+    handleCodeInApp: true
   };
 }
 
