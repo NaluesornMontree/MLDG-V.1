@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../firebase';
 import {
   addDoc,
@@ -42,6 +42,44 @@ function isClubRentalService(serviceName = '') {
 
 function getServiceUnit(service = {}) {
   return service.Service_Unit || service.Unit || service.unit || 'หน่วย';
+}
+
+function getBookingPaymentDraft(booking = {}) {
+  const draft = booking.Payment_Draft || booking.paymentDraft;
+  if (!draft || typeof draft !== 'object') return null;
+  if (!Array.isArray(draft.Items_List) || draft.Items_List.length === 0) return null;
+  return draft;
+}
+
+function normalizeServiceName(value = '') {
+  return String(value).trim().toLowerCase();
+}
+
+function getDraftQuantityForService(service = {}, draft = null) {
+  if (!draft) return null;
+
+  const matchedById = draft.Items_List.find((item) => (
+    item.serviceId === service.id ||
+    item.Service_ID === service.id ||
+    item.service_id === service.id
+  ));
+
+  if (matchedById) {
+    return toWholeNumber(matchedById.qty ?? matchedById.quantity ?? 0);
+  }
+
+  const serviceName = normalizeServiceName(service.Service_Name || service.name || '');
+  const matchedItem = draft.Items_List.find((item) => {
+    const itemName = normalizeServiceName(item.item_name || item.name || '');
+    return itemName && serviceName && (
+      itemName === serviceName ||
+      itemName.includes(serviceName) ||
+      serviceName.includes(itemName)
+    );
+  });
+
+  if (!matchedItem) return null;
+  return toWholeNumber(matchedItem.qty ?? matchedItem.quantity ?? 0);
 }
 
 const TIME_SLOTS_ORDER = [
@@ -171,6 +209,9 @@ function LanePaymentModal({
   const [loadingServices, setLoadingServices] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isClubDetailOpen, setIsClubDetailOpen] = useState(false);
+  const skipNextDraftAutosaveRef = useRef(true);
+  const draftAutosaveTimerRef = useRef(null);
+  const isSavingDraftRef = useRef(false);
 
   const rentedClubs = useMemo(
     () => (Array.isArray(booking?.rentedClubs) ? booking.rentedClubs : []),
@@ -253,11 +294,19 @@ function LanePaymentModal({
           ...serviceDoc.data()
         }));
 
+        skipNextDraftAutosaveRef.current = true;
         setServices(servicesData);
 
+        const paymentDraft = getBookingPaymentDraft(booking);
         const initialQuantities = {};
         servicesData.forEach((service) => {
           const serviceName = service.Service_Name || '';
+          const draftQty = getDraftQuantityForService(service, paymentDraft);
+
+          if (draftQty !== null) {
+            initialQuantities[service.id] = draftQty;
+            return;
+          }
 
           if (isClubRentalService(serviceName)) {
             initialQuantities[service.id] = booking?.needsClubRent ? totalRentedClubQty : 0;
@@ -268,6 +317,9 @@ function LanePaymentModal({
         });
 
         setQuantities(initialQuantities);
+        setPaymentMethod(paymentDraft?.Payment_Method || 'เงินสด');
+        setCashAmount(toWholeNumber(paymentDraft?.Cash_Amount || 0));
+        setTransferAmount(toWholeNumber(paymentDraft?.Transfer_Amount || 0));
       } catch (error) {
         console.error('Error fetching active services:', error);
       } finally {
@@ -292,8 +344,9 @@ function LanePaymentModal({
     const fetchPointContext = async () => {
       const bookingUserId =
         booking?.User_ID && booking.User_ID !== 'walk-in' ? booking.User_ID : '';
+      const paymentDraft = getBookingPaymentDraft(booking);
 
-      setUsedPoints(0);
+      setUsedPoints(toWholeNumber(paymentDraft?.Used_Points || 0));
       setMemberPoints(Number(booking?.Points_Balance || 0));
 
       try {
@@ -382,28 +435,73 @@ function LanePaymentModal({
     });
   };
 
-  const handleConfirmPayment = async () => {
-    if (isProcessing) return;
+  const buildItemsList = useCallback(() => services
+    .map((service) => {
+      const qty = quantities[service.id] || 0;
+      if (qty <= 0) return null;
+
+      return {
+        serviceId: service.id,
+        Service_ID: service.id,
+        item_name: service.Service_Name,
+        qty,
+        price: qty * toWholeNumber(service.Price_Rate || 0),
+        unit: getServiceUnit(service),
+        unitPrice: toWholeNumber(service.Price_Rate || 0)
+      };
+    })
+    .filter(Boolean), [quantities, services]);
+
+  const validateItemsList = (itemsList) => {
+    if (itemsList.length === 0) {
+      window.appAlert('กรุณาเลือกรายการชำระเงินอย่างน้อย 1 รายการ');
+      return false;
+    }
+
+    const selectedClubRentalItem = itemsList.find((item) =>
+      isClubRentalService(item.item_name || '')
+    );
+
+    if (
+      selectedClubRentalItem &&
+      booking.needsClubRent &&
+      selectedClubRentalItem.qty !== totalRentedClubQty
+    ) {
+      window.appAlert('จำนวนค่าเช่าไม้กอล์ฟต้องตรงกับจำนวนไม้กอล์ฟที่เลือกไว้ตอนจอง');
+      return false;
+    }
+
+    return true;
+  };
+
+  const getPaymentBreakdown = useCallback(() => ({
+    cashAmount:
+      paymentMethod === 'รวมทั้งสอง'
+        ? safeCashAmount
+        : paymentMethod === 'เงินสด'
+          ? netAmount
+          : 0,
+    transferAmount:
+      paymentMethod === 'รวมทั้งสอง'
+        ? safeTransferAmount
+        : paymentMethod === 'เงินโอน'
+          ? netAmount
+          : 0
+  }), [netAmount, paymentMethod, safeCashAmount, safeTransferAmount]);
+
+  const persistPaymentDraft = useCallback(async () => {
+    if (isSavingDraftRef.current || isProcessing) return;
 
     try {
-      setIsProcessing(true);
-
-      const itemsList = services
-        .map((service) => {
-          const qty = quantities[service.id] || 0;
-          if (qty <= 0) return null;
-
-          return {
-            item_name: service.Service_Name,
-            qty,
-            price: qty * toWholeNumber(service.Price_Rate || 0),
-            unit: getServiceUnit(service)
-          };
-        })
-        .filter(Boolean);
+      isSavingDraftRef.current = true;
+      const itemsList = buildItemsList();
 
       if (itemsList.length === 0) {
-        window.appAlert('กรุณาเลือกรายการชำระเงินอย่างน้อย 1 รายการ');
+        await updateDoc(doc(db, 'bookings', booking.id), {
+          Payment_Draft: null,
+          Payment_Draft_Status: 'empty',
+          Payment_Draft_Updated_At: serverTimestamp()
+        });
         return;
       }
 
@@ -416,14 +514,130 @@ function LanePaymentModal({
         booking.needsClubRent &&
         selectedClubRentalItem.qty !== totalRentedClubQty
       ) {
-        window.appAlert('จำนวนค่าเช่าไม้กอล์ฟต้องตรงกับจำนวนไม้กอล์ฟที่เลือกไว้ตอนจอง');
         return;
       }
+
+      const { cashAmount: draftCashAmount, transferAmount: draftTransferAmount } = getPaymentBreakdown();
+
+      await updateDoc(doc(db, 'bookings', booking.id), {
+        Payment_Draft_Status: 'draft',
+        Payment_Draft_Updated_At: serverTimestamp(),
+        Payment_Draft: {
+          Booking_ID: booking.id,
+          User_ID: booking.User_ID || 'walk-in',
+          FullName: booking.customerName || 'ลูกค้า Walk-in',
+          Customer_Email: booking.customerEmail || booking.Email || booking.email || '',
+          Customer_Phone: booking.customerPhone || booking.phone || '',
+          Guest_Count: Math.max(1, toWholeNumber(booking.guestCount || booking.guests || 1)),
+          Booking_Type: booking.bookingType || 'walk-in',
+          Needs_Instructor: Boolean(booking.needsInstructor),
+          Needs_Club_Rent: Boolean(booking.needsClubRent),
+          Cashier_ID: cashierInfo?.id || '',
+          Cashier_Name: cashierInfo?.name || 'ไม่ระบุชื่อผู้รับชำระ',
+          Cashier_Role: cashierInfo?.role || '',
+          Cashier_Email: cashierInfo?.email || '',
+          Total_Amount: totalAmount,
+          Used_Points: redeemedPoints,
+          Point_Discount: safePointDiscount,
+          Earned_Points: earnedPoints,
+          Point_Balance_Change: pointBalanceChange,
+          Net_Amount: netAmount,
+          Payment_Method: paymentMethod,
+          Cash_Amount: draftCashAmount,
+          Transfer_Amount: draftTransferAmount,
+          Payment_Draft_Is_Ready: paymentMethod !== 'รวมทั้งสอง' || mixedPaymentTotal === netAmount,
+          Lane_Code: checkoutLaneLabel,
+          Time_Slots: checkoutSlots,
+          Lane_Time_Slots: checkoutDetailedSlots || getBookingDetailedSlots(booking),
+          Items_List: itemsList,
+          Rented_Clubs: rentedClubs,
+          status: 'draft'
+        }
+      });
+    } catch (error) {
+      console.error('Error saving payment draft:', error);
+    } finally {
+      isSavingDraftRef.current = false;
+    }
+  }, [
+    booking,
+    buildItemsList,
+    cashierInfo?.email,
+    cashierInfo?.id,
+    cashierInfo?.name,
+    cashierInfo?.role,
+    checkoutDetailedSlots,
+    checkoutLaneLabel,
+    checkoutSlots,
+    earnedPoints,
+    getPaymentBreakdown,
+    isProcessing,
+    mixedPaymentTotal,
+    netAmount,
+    paymentMethod,
+    pointBalanceChange,
+    redeemedPoints,
+    rentedClubs,
+    safePointDiscount,
+    totalAmount,
+    totalRentedClubQty
+  ]);
+
+  useEffect(() => {
+    if (!booking?.id || loadingServices || services.length === 0 || isProcessing) return undefined;
+
+    if (skipNextDraftAutosaveRef.current) {
+      skipNextDraftAutosaveRef.current = false;
+      return undefined;
+    }
+
+    if (draftAutosaveTimerRef.current) {
+      clearTimeout(draftAutosaveTimerRef.current);
+    }
+
+    draftAutosaveTimerRef.current = setTimeout(() => {
+      persistPaymentDraft();
+    }, 800);
+
+    return () => {
+      if (draftAutosaveTimerRef.current) {
+        clearTimeout(draftAutosaveTimerRef.current);
+      }
+    };
+  }, [
+    booking?.id,
+    quantities,
+    usedPoints,
+    paymentMethod,
+    cashAmount,
+    transferAmount,
+    totalAmount,
+    netAmount,
+    safePointDiscount,
+    redeemedPoints,
+    earnedPoints,
+    pointBalanceChange,
+    loadingServices,
+    services.length,
+    isProcessing,
+    persistPaymentDraft
+  ]);
+
+  const handleConfirmPayment = async () => {
+    if (isProcessing) return;
+
+    try {
+      setIsProcessing(true);
+
+      const itemsList = buildItemsList();
+      if (!validateItemsList(itemsList)) return;
 
       if (paymentMethod === 'รวมทั้งสอง' && mixedPaymentTotal !== netAmount) {
         window.appAlert('กรุณากรอกจำนวนเงินสดและเงินโอนให้รวมกันเท่ากับยอดชำระสุทธิ');
         return;
       }
+
+      const { cashAmount: finalCashAmount, transferAmount: finalTransferAmount } = getPaymentBreakdown();
 
       await addDoc(collection(db, 'payments'), {
         Booking_ID: booking.id,
@@ -450,18 +664,8 @@ function LanePaymentModal({
         Point_Balance_Change: pointBalanceChange,
         Net_Amount: netAmount,
         Payment_Method: paymentMethod,
-        Cash_Amount:
-          paymentMethod === 'รวมทั้งสอง'
-            ? safeCashAmount
-            : paymentMethod === 'เงินสด'
-              ? netAmount
-              : 0,
-        Transfer_Amount:
-          paymentMethod === 'รวมทั้งสอง'
-            ? safeTransferAmount
-            : paymentMethod === 'เงินโอน'
-              ? netAmount
-              : 0,
+        Cash_Amount: finalCashAmount,
+        Transfer_Amount: finalTransferAmount,
         Lane_Code: checkoutLaneLabel,
         Time_Slots: checkoutSlots,
         Lane_Time_Slots: checkoutDetailedSlots || getBookingDetailedSlots(booking),
@@ -507,6 +711,9 @@ function LanePaymentModal({
           Billing_Requested: false,
           billingRequestedAt: null,
           Billing_Requested_At: null,
+          Payment_Draft: null,
+          Payment_Draft_Status: 'paid',
+          Payment_Draft_Updated_At: serverTimestamp(),
           completedAt: new Date().toISOString()
         });
       } else {
@@ -527,6 +734,9 @@ function LanePaymentModal({
           Billing_Requested: false,
           billingRequestedAt: null,
           Billing_Requested_At: null,
+          Payment_Draft: null,
+          Payment_Draft_Status: 'paid',
+          Payment_Draft_Updated_At: serverTimestamp(),
           updatedAt: new Date().toISOString()
         });
       }
@@ -764,6 +974,17 @@ function LanePaymentModal({
                   );
                 })
               )}
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-xs font-black text-emerald-800">
+                  ระบบบันทึกรายการให้ลูกค้าตรวจสอบอัตโนมัติ
+                </span>
+                <span className="text-[11px] font-bold text-emerald-700/80">
+                  ลูกค้าจะเห็นยอดล่าสุดหลังหยุดแก้ไขสักครู่
+                </span>
+              </div>
             </div>
 
             <div className="mt-6 space-y-2.5 rounded-xl border border-slate-200 bg-slate-50/50 p-3 pt-4 sm:p-4">

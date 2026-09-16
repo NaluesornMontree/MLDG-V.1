@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, getDoc, onSnapshot, serverTimestamp, doc, updateDoc, setDoc } from 'firebase/firestore';
 import BookingFlow from './BookingFlow'; 
@@ -26,6 +26,32 @@ import {
   getPaymentItemUnitPrice
 } from '../utils/paymentItemUtils';
 
+function getServiceName(service = {}) {
+  return String(service.Service_Name || service.name || service.Name || '');
+}
+
+function isLaneService(serviceName = '') {
+  const normalizedName = serviceName.toLowerCase();
+  return serviceName.includes('เลน') || serviceName.includes('ชั่วโมง') || normalizedName.includes('lane');
+}
+
+function isInstructorService(serviceName = '') {
+  const normalizedName = serviceName.toLowerCase();
+  return serviceName.includes('ผู้สอน') || normalizedName.includes('instructor');
+}
+
+function isClubRentalService(serviceName = '') {
+  const normalizedName = serviceName.toLowerCase();
+  return serviceName.includes('ไม้กอล์ฟ') || normalizedName.includes('club');
+}
+
+function getServiceRate(services = [], matcher) {
+  const service = services.find((item) => matcher(getServiceName(item)));
+  return toWholeNumber(service?.Price_Rate ?? service?.price ?? service?.Rate ?? 0);
+}
+
+const SHOW_ESTIMATED_LANE_FEE = false;
+
 function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailSent }) {
   const { clubRentalRate, clubRentalRateLoading } = useClubRentalRate();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -49,6 +75,8 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
   const [receiptBooking, setReceiptBooking] = useState(null);
   const [receiptPayment, setReceiptPayment] = useState(null);
   const [receiptPaymentLoading, setReceiptPaymentLoading] = useState(false);
+  const [receiptServiceRates, setReceiptServiceRates] = useState({ lane: 0, instructor: 0, club: 0 });
+  const [receiptServiceRatesLoading, setReceiptServiceRatesLoading] = useState(true);
   const [billingRequestLoadingId, setBillingRequestLoadingId] = useState(null);
   const [bookingModifyLimitHours, setBookingModifyLimitHours] = useState(2);
 
@@ -67,25 +95,47 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const getDismissedPaymentReviewPrompts = () => {
+  const getDismissedPaymentReviewPrompts = useCallback(() => {
     if (!user?.uid) return [];
     try {
       return JSON.parse(localStorage.getItem(`mlg_dismissed_payment_reviews_${user.uid}`) || '[]');
     } catch (error) {
       return [];
     }
-  };
+  }, [user?.uid]);
 
-  const markPaymentReviewPromptDismissed = (paymentId) => {
+  const markPaymentReviewPromptDismissed = useCallback((paymentId) => {
     if (!user?.uid || !paymentId) return;
     const dismissed = new Set(getDismissedPaymentReviewPrompts());
     dismissed.add(paymentId);
     localStorage.setItem(`mlg_dismissed_payment_reviews_${user.uid}`, JSON.stringify([...dismissed]));
-  };
+  }, [getDismissedPaymentReviewPrompts, user?.uid]);
+
+  useEffect(() => {
+    const servicesQuery = query(collection(db, 'service_settings'), where('Is_Active', '==', true));
+    const unsubscribe = onSnapshot(
+      servicesQuery,
+      (snapshot) => {
+        const services = snapshot.docs.map((serviceDoc) => serviceDoc.data());
+        setReceiptServiceRates({
+          lane: getServiceRate(services, isLaneService),
+          instructor: getServiceRate(services, isInstructorService),
+          club: getServiceRate(services, isClubRentalService)
+        });
+        setReceiptServiceRatesLoading(false);
+      },
+      (error) => {
+        console.error('Error loading receipt service rates:', error);
+        setReceiptServiceRatesLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
 
   const formatPoints = (value) => toWholeNumber(value).toLocaleString();
 
-  const getMemberEmailVariants = () => {
+  const getMemberEmailVariants = useCallback(() => {
     const emails = [
       user?.email,
       userData?.Email,
@@ -96,22 +146,22 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
       .filter(Boolean);
 
     return [...new Set(emails.flatMap((email) => [email, email.toLowerCase()]))];
-  };
+  }, [user?.email, userData?.Email, userData?.email]);
 
-  const getBookingSortTime = (booking) => {
+  const getBookingSortTime = useCallback((booking) => {
     const dateValue = booking.createdAt || booking.Created_At || booking.bookingDate || booking.Booking_Date;
     if (dateValue?.toDate) return dateValue.toDate().getTime();
     const parsed = new Date(dateValue || 0).getTime();
     return Number.isNaN(parsed) ? 0 : parsed;
-  };
+  }, []);
 
-  const getPaymentSortTime = (payment) => {
+  const getPaymentSortTime = useCallback((payment) => {
     const dateValue = payment?.Payment_Date || payment?.createdAt || payment?.Updated_At;
     const parsed = dateValue?.toDate ? dateValue.toDate().getTime() : new Date(dateValue || 0).getTime();
     return Number.isNaN(parsed) ? 0 : parsed;
-  };
+  }, []);
 
-  const fetchMemberBookings = async ({ status = null } = {}) => {
+  const fetchMemberBookings = useCallback(async ({ status = null } = {}) => {
     if (!user?.uid) return [];
 
     const bookingQueries = [
@@ -143,7 +193,7 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
     });
 
     return [...bookingsById.values()].sort((a, b) => getBookingSortTime(b) - getBookingSortTime(a));
-  };
+  }, [getBookingSortTime, getMemberEmailVariants, user?.uid]);
 
   useEffect(() => {
     if (userData) {
@@ -191,7 +241,7 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
     }
   };
 
-  const fetchMyBookings = async () => {
+  const fetchMyBookings = useCallback(async () => {
     setLoadingHistory(true);
     try {
       const bookings = await fetchMemberBookings();
@@ -252,13 +302,13 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
       console.error("Error fetching personal bookings:", error);
     }
     setLoadingHistory(false);
-  };
+  }, [fetchMemberBookings, getBookingSortTime, user?.displayName, user?.email, user?.uid, userData?.FullName]);
 
   useEffect(() => {
     if (activeTab === 'history') {
       fetchMyBookings();
     }
-  }, [activeTab]);
+  }, [activeTab, fetchMyBookings]);
 
   useEffect(() => {
     const fetchBookingPolicy = async () => {
@@ -278,7 +328,7 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
     fetchBookingPolicy();
   }, []);
 
-  const fetchReviewableBookings = async () => {
+  const fetchReviewableBookings = useCallback(async () => {
     setLoadingReviewableBookings(true);
     try {
       const [bookingSnap, reviewSnap, paymentSnap] = await Promise.all([
@@ -324,13 +374,13 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
       console.error('Error fetching reviewable bookings:', error);
     }
     setLoadingReviewableBookings(false);
-  };
+  }, [fetchMemberBookings, getPaymentSortTime, selectedReviewBooking, user?.uid]);
 
   useEffect(() => {
     if (activeTab === 'writereview') {
       fetchReviewableBookings();
     }
-  }, [activeTab]);
+  }, [activeTab, fetchReviewableBookings]);
 
   const fetchShopReviews = async () => {
     setLoadingShopReviews(true);
@@ -413,7 +463,7 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
       cancelled = true;
       unsubscribe();
     };
-  }, [user?.uid, paymentReviewPrompt]);
+  }, [getDismissedPaymentReviewPrompts, getPaymentSortTime, user?.uid, paymentReviewPrompt]);
 
   const handleSelectReviewBooking = (booking) => {
     const existingReview = reviewMap[booking.id];
@@ -502,6 +552,11 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
     setReceiptPayment(null);
     setReceiptPaymentLoading(true);
     try {
+      const latestBookingSnap = await getDoc(doc(db, 'bookings', booking.id));
+      if (latestBookingSnap.exists()) {
+        setReceiptBooking({ id: latestBookingSnap.id, ...latestBookingSnap.data() });
+      }
+
       const paymentQuery = query(
         collection(db, 'payments'),
         where('Booking_ID', '==', booking.id)
@@ -549,6 +604,83 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
   const getReceiptNeedsInstructor = () => (
     Boolean(receiptBooking?.needsInstructor || receiptPayment?.Needs_Instructor)
   );
+
+  const getReceiptPaymentDraft = () => {
+    const draft = receiptBooking?.Payment_Draft || receiptBooking?.paymentDraft;
+    if (!draft || typeof draft !== 'object') return null;
+    if (!Array.isArray(draft.Items_List) || draft.Items_List.length === 0) return null;
+    return draft;
+  };
+
+  const getReceiptLaneCount = () => {
+    if (Array.isArray(receiptBooking?.selectedLanes) && receiptBooking.selectedLanes.length > 0) {
+      return receiptBooking.selectedLanes.length;
+    }
+
+    const laneValue = receiptBooking?.laneNumber || receiptBooking?.laneNum || '';
+    const laneMatches = String(laneValue).match(/\d+/g);
+    return Math.max(1, laneMatches?.length || 1);
+  };
+
+  const getReceiptUsageSlotCount = () => {
+    const detailedSlots = receiptBooking?.detailedSlots || receiptBooking?.Detailed_Slots || {};
+    if (detailedSlots && typeof detailedSlots === 'object' && !Array.isArray(detailedSlots)) {
+      const detailedTotal = Object.values(detailedSlots).reduce((sum, slots) => (
+        sum + (Array.isArray(slots) ? slots.length : 0)
+      ), 0);
+      if (detailedTotal > 0) return detailedTotal;
+    }
+
+    const timeSlotCount = Array.isArray(receiptBooking?.timeSlots) ? receiptBooking.timeSlots.length : 0;
+    return timeSlotCount * getReceiptLaneCount();
+  };
+
+  const getReceiptClubQty = () => getReceiptRentedClubs().reduce(
+    (sum, club) => sum + toWholeNumber(club.qty ?? club.quantity ?? club.Quantity ?? 0),
+    0
+  );
+
+  const getEstimatedReceiptItems = () => {
+    if (!receiptBooking) return [];
+
+    const laneSlotCount = getReceiptUsageSlotCount();
+    const laneRate = receiptServiceRates.lane;
+    const instructorRate = receiptServiceRates.instructor;
+    const clubRate = clubRentalRate || receiptServiceRates.club;
+    const clubQty = getReceiptClubQty();
+
+    return [
+      SHOW_ESTIMATED_LANE_FEE && laneSlotCount > 0 && {
+        item_name: 'ค่าใช้บริการเลนซ้อม',
+        unit: 'ช่วงเวลา',
+        qty: laneSlotCount,
+        unitPrice: laneRate,
+        price: laneSlotCount * laneRate
+      },
+      getReceiptNeedsInstructor() && {
+        item_name: 'ค่าผู้สอนพื้นฐานการเล่นกอล์ฟ',
+        unit: 'ครั้ง',
+        qty: 1,
+        unitPrice: instructorRate,
+        price: instructorRate
+      },
+      getReceiptNeedsClubRent() && clubQty > 0 && {
+        item_name: 'ค่าเช่าไม้กอล์ฟ',
+        unit: 'ไม้',
+        qty: clubQty,
+        unitPrice: clubRate,
+        price: clubQty * clubRate
+      }
+    ].filter(Boolean);
+  };
+
+  const estimatedReceiptItems = getEstimatedReceiptItems();
+  const estimatedReceiptTotal = estimatedReceiptItems.reduce((sum, item) => sum + getPaymentItemTotal(item), 0);
+  const receiptPaymentDraft = getReceiptPaymentDraft();
+  const draftReceiptItems = Array.isArray(receiptPaymentDraft?.Items_List) ? receiptPaymentDraft.Items_List : [];
+  const draftReceiptTotal = toWholeNumber(receiptPaymentDraft?.Total_Amount ?? draftReceiptItems.reduce((sum, item) => sum + getPaymentItemTotal(item), 0));
+  const draftReceiptDiscount = toWholeNumber(receiptPaymentDraft?.Point_Discount || 0);
+  const draftReceiptNet = toWholeNumber(receiptPaymentDraft?.Net_Amount ?? Math.max(0, draftReceiptTotal - draftReceiptDiscount));
 
   const handleSaveReceipt = () => {
     if (!receiptBooking) return;
@@ -1149,7 +1281,19 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
         {/* TAB 3: หน้าแสดงประวัติและสถานะคิวการจองของตนเอง */}
         {activeTab === 'history' && (
           <div className="w-full max-w-[1600px] mx-auto rounded-[1.75rem] border border-slate-200 bg-white p-5 text-left shadow-sm animate-fadeIn sm:p-8">
-            <h2 className="text-xl font-black text-slate-800 mb-6 uppercase tracking-tight">รายการจองของฉัน</h2>
+            <div className="mb-6 flex flex-col gap-3 border-b border-slate-100 pb-5 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">My Bookings</p>
+                <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900">รายการจองของฉัน</h2>
+                <p className="mt-2 text-xs font-bold leading-relaxed text-slate-500">
+                  ตรวจสอบสถานะการจอง รายละเอียดการใช้บริการ ใบเสร็จ และแจ้งคิดเงินเมื่อกำลังใช้งานอยู่
+                </p>
+              </div>
+              <div className="w-fit rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-left">
+                <div className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">Total</div>
+                <div className="mt-1 text-xl font-black text-emerald-800">{myBookings.length} รายการ</div>
+              </div>
+            </div>
             
             {loadingHistory ? (
               <p className="text-center py-10 text-slate-400 font-bold">กำลังดึงข้อมูลตารางเวลาของคุณ...</p>
@@ -1158,82 +1302,100 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
                 คุณยังไม่มีรายการจองในระบบขณะนี้
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[680px] text-left text-sm border-collapse">
-                  <thead>
-                    <tr className="text-slate-400 text-xs font-black uppercase border-b border-slate-200">
-                      <th className="py-3 px-2">วันที่เข้าใช้</th>
-                      <th>ตำแหน่งเลน</th>
-                      <th>ช่วงเวลาซ้อม</th>
-                      <th className="text-center">สถานะบิลคิว</th>
-                      <th className="text-center">จัดการ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="font-bold text-slate-600 text-xs">
-                    {myBookings.map((b) => {
-                      const canModify = canModifyBooking(b);
-                      const canAskBilling = canRequestBilling(b);
-                      const billingRequested = b.billingRequested || b.Billing_Requested;
-                      return (
-                        <tr key={b.id} className="border-b border-slate-100 hover:bg-slate-50/50">
-                          <td className="py-4 px-2 text-slate-800">{b.bookingDate}</td>
-                          <td className="text-indigo-600">{b.isManualIncome ? (b.laneNumber || '-') : `เลน ${b.selectedLanes?.join(', ') || b.laneNumber}`}</td>
-                          <td className="text-slate-500 font-medium">{b.timeSlots?.join(', ')}</td>
-                          <td className="text-center">
-                            <span className={`px-2.5 py-1 rounded-md text-[10px] uppercase ${getHistoryStatusClass(b)} ${b.status === 'occupied' && paymentsByBookingId[b.id]?.status !== 'cancelled' ? 'animate-pulse' : ''}`}>
+              <div className="space-y-3">
+                {myBookings.map((b) => {
+                  const canModify = canModifyBooking(b);
+                  const canAskBilling = canRequestBilling(b);
+                  const billingRequested = b.billingRequested || b.Billing_Requested;
+                  const laneLabel = b.isManualIncome
+                    ? (b.laneNumber || '-')
+                    : `เลน ${b.selectedLanes?.join(', ') || b.laneNumber || '-'}`;
+                  const timeLabel = Array.isArray(b.timeSlots) && b.timeSlots.length > 0
+                    ? b.timeSlots.join(', ')
+                    : '-';
+
+                  return (
+                    <div
+                      key={b.id}
+                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-emerald-200 hover:shadow-md sm:p-5"
+                    >
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-xl bg-slate-900 px-3 py-1.5 text-sm font-black text-white">
+                              {b.bookingDate || '-'}
+                            </span>
+                            <span className={`rounded-xl px-3 py-1.5 text-[11px] font-black ${getHistoryStatusClass(b)} ${b.status === 'occupied' && paymentsByBookingId[b.id]?.status !== 'cancelled' ? 'animate-pulse' : ''}`}>
                               {getHistoryStatusLabel(b)}
                             </span>
-                          </td>
-                          <td className="text-center">
-                            <div className="flex flex-wrap justify-center gap-2">
+                          </div>
+                          <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[minmax(180px,0.75fr)_minmax(240px,1.25fr)]">
+                            <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3">
+                              <div className="text-[10px] font-black uppercase tracking-[0.12em] text-indigo-500">ตำแหน่งเลน</div>
+                              <div className="mt-1 break-words text-base font-black leading-relaxed text-indigo-800">
+                                {laneLabel}
+                              </div>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                              <div className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-400">ช่วงเวลาซ้อม</div>
+                              <div className="mt-1 break-words font-mono text-sm font-extrabold leading-relaxed text-slate-700">
+                                {timeLabel}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex w-full flex-col gap-2 lg:w-[360px] lg:shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => openReceiptBooking(b)}
+                            className="inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-700 transition-all hover:bg-slate-50"
+                          >
+                            ตรวจสอบรายละเอียด
+                          </button>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-3">
+                            {canAskBilling && (
                               <button
                                 type="button"
-                                onClick={() => openReceiptBooking(b)}
-                                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black text-slate-700 hover:bg-slate-50"
+                                onClick={() => handleRequestBilling(b)}
+                                disabled={billingRequested || billingRequestLoadingId === b.id}
+                                className={`rounded-xl border px-3 py-2.5 text-xs font-black transition-all ${
+                                  billingRequested
+                                    ? 'cursor-not-allowed border-emerald-200 bg-emerald-50 text-emerald-700'
+                                    : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                }`}
                               >
-                                ตรวจสอบรายละเอียด
+                                {billingRequestLoadingId === b.id ? 'กำลังแจ้ง...' : billingRequested ? 'แจ้งแล้ว' : 'แจ้งคิดเงิน'}
                               </button>
-                              {canAskBilling && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleRequestBilling(b)}
-                                  disabled={billingRequested || billingRequestLoadingId === b.id}
-                                  className={`rounded-lg border px-3 py-1.5 text-[10px] font-black transition-all ${
-                                    billingRequested
-                                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 cursor-not-allowed'
-                                      : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                                  }`}
-                                >
-                                  {billingRequestLoadingId === b.id ? 'กำลังแจ้ง...' : billingRequested ? 'แจ้งคิดเงินแล้ว' : 'แจ้งคิดเงิน'}
-                                </button>
-                              )}
-                              {canModify ? (
-                                <>
+                            )}
+                            {canModify ? (
+                              <>
                                 <button
                                   type="button"
                                   onClick={() => openEditBooking(b)}
-                                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black text-emerald-700 hover:bg-emerald-100"
+                                  className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs font-black text-emerald-700 transition-all hover:bg-emerald-100"
                                 >
                                   แก้ไข
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setCancelTarget(b)}
-                                  className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-[10px] font-black text-rose-700 hover:bg-rose-100"
+                                  className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs font-black text-rose-700 transition-all hover:bg-rose-100"
                                 >
                                   ยกเลิก
                                 </button>
-                                </>
-                              ) : (
-                                <span className="self-center text-[10px] font-bold text-slate-400">แก้ไขไม่ได้</span>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                              </>
+                            ) : (
+                              <div className={`${canAskBilling ? 'sm:col-span-2' : 'sm:col-span-3'} flex min-h-[42px] items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-400`}>
+                                แก้ไขไม่ได้
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1787,8 +1949,111 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
                       กำลังโหลดข้อมูลการชำระเงิน...
                     </div>
                   ) : !receiptPayment ? (
-                    <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-xs font-bold text-slate-400">
-                      ยังไม่มีข้อมูลการชำระเงินสำหรับรายการนี้
+                    <div className="mt-3 space-y-3">
+                      <div className={`rounded-xl border px-3 py-2 text-xs font-bold ${
+                        receiptPaymentDraft
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                          : 'border-amber-200 bg-amber-50 text-amber-800'
+                      }`}>
+                        {receiptPaymentDraft
+                          ? 'รายการนี้ยังไม่ได้ชำระเงิน ร้านได้บันทึกรายการให้ตรวจสอบก่อนปิดยอดแล้ว'
+                          : 'รายการนี้ยังไม่ได้ชำระเงิน ระบบแสดงยอดประมาณการให้ตรวจสอบก่อนชำระจริง'}
+                      </div>
+
+                      {(!receiptPaymentDraft && (receiptServiceRatesLoading || clubRentalRateLoading)) ? (
+                        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-xs font-bold text-slate-400">
+                          กำลังโหลดราคาค่าบริการ...
+                        </div>
+                      ) : (receiptPaymentDraft ? draftReceiptItems : estimatedReceiptItems).length > 0 ? (
+                        <div className="space-y-2">
+                          {(receiptPaymentDraft ? draftReceiptItems : estimatedReceiptItems).map((item, index) => (
+                            <div key={`${item.item_name || 'estimated-item'}-${index}`} className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-3 py-2.5">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-black text-slate-800">{item.item_name || item.name || '-'}</div>
+                                  <div className="mt-1 text-[11px] font-bold text-slate-500">
+                                    ราคา {getPaymentItemUnitPrice(item).toLocaleString('th-TH')} บาท/{getPaymentItemUnit(item)}
+                                  </div>
+                                </div>
+                                <div className="shrink-0 text-right text-sm font-black text-emerald-700">
+                                  {getPaymentItemTotal(item).toLocaleString('th-TH')} บาท
+                                </div>
+                              </div>
+                              <div className="mt-1 text-[10px] font-bold text-slate-500">
+                                จำนวน {getPaymentItemQuantity(item).toLocaleString('th-TH')} {getPaymentItemUnit(item)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-xs font-bold text-slate-400">
+                          ยังไม่มีรายละเอียดค่าบริการสำหรับรายการนี้
+                        </div>
+                      )}
+
+                      <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3 space-y-2">
+                        <div className="flex justify-between text-sm font-bold text-slate-600">
+                          <span>{receiptPaymentDraft ? 'ยอดรวมที่ร้านบันทึกไว้' : 'ยอดรวมประมาณการ'}</span>
+                          <span>{toWholeNumber(receiptPaymentDraft ? draftReceiptTotal : estimatedReceiptTotal).toLocaleString()} บาท</span>
+                        </div>
+                        <div className="flex justify-between text-sm font-bold text-slate-600">
+                          <span>ส่วนลดจากแต้ม</span>
+                          <span>{toWholeNumber(receiptPaymentDraft ? draftReceiptDiscount : 0).toLocaleString()} บาท</span>
+                        </div>
+                        {receiptPaymentDraft && (
+                          <div className="flex justify-between text-sm font-bold text-slate-600">
+                            <span>วิธีชำระเงินที่เลือกไว้</span>
+                            <span>{receiptPaymentDraft.Payment_Method || '-'}</span>
+                          </div>
+                        )}
+                        {receiptPaymentDraft && (
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <div className="rounded-xl bg-white px-3 py-2">
+                              <div className="text-[10px] font-black text-slate-400">เงินสด</div>
+                              <div className="text-sm font-black text-slate-800">{toWholeNumber(receiptPaymentDraft.Cash_Amount || 0).toLocaleString()} บาท</div>
+                            </div>
+                            <div className="rounded-xl bg-white px-3 py-2">
+                              <div className="text-[10px] font-black text-slate-400">เงินโอน</div>
+                              <div className="text-sm font-black text-slate-800">{toWholeNumber(receiptPaymentDraft.Transfer_Amount || 0).toLocaleString()} บาท</div>
+                            </div>
+                          </div>
+                        )}
+                        {receiptPaymentDraft && (
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <div className="rounded-xl bg-white px-3 py-2">
+                              <div className="text-[10px] font-black text-slate-400">แต้มที่ใช้</div>
+                              <div className="text-sm font-black text-slate-800">{toWholeNumber(receiptPaymentDraft.Used_Points || 0).toLocaleString()} PTS</div>
+                            </div>
+                            <div className="rounded-xl bg-emerald-50 px-3 py-2">
+                              <div className="text-[10px] font-black text-emerald-700">แต้มที่จะได้รับ</div>
+                              <div className="text-sm font-black text-emerald-800">+{toWholeNumber(receiptPaymentDraft.Earned_Points || 0).toLocaleString()} PTS</div>
+                            </div>
+                            <div className="rounded-xl bg-slate-100 px-3 py-2">
+                              <div className="text-[10px] font-black text-slate-500">ยอดแต้มเปลี่ยนแปลง</div>
+                              <div className="text-sm font-black text-slate-800">{toWholeNumber(receiptPaymentDraft.Point_Balance_Change || 0).toLocaleString()} PTS</div>
+                            </div>
+                          </div>
+                        )}
+                        {receiptPaymentDraft && (
+                          <div className="flex justify-between gap-3 text-sm font-bold text-slate-600">
+                            <span className="shrink-0">ผู้บันทึกรายการ</span>
+                            <span className="text-right text-slate-800">{getCashierLabel(receiptPaymentDraft)}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between border-t border-slate-200 pt-3">
+                          <span className="text-base font-black text-slate-800">
+                            {receiptPaymentDraft ? 'ยอดสุทธิที่ต้องชำระ' : 'ยอดสุทธิที่ต้องชำระโดยประมาณ'}
+                          </span>
+                          <span className="text-xl font-black text-emerald-700">
+                            {toWholeNumber(receiptPaymentDraft ? draftReceiptNet : estimatedReceiptTotal).toLocaleString()} บาท
+                          </span>
+                        </div>
+                        <p className="text-[10px] font-bold leading-relaxed text-slate-400">
+                          {receiptPaymentDraft
+                            ? 'ยอดนี้เป็นรายการที่ร้านบันทึกไว้ก่อนปิดยอดจริง หากมีการปรับรายการเพิ่มเติมยอดอาจเปลี่ยนแปลงได้'
+                            : 'ยอดจริงอาจเปลี่ยนแปลงได้เมื่อพนักงานรับชำระเงิน เช่น การใช้แต้มส่วนลด หรือการปรับจำนวนบริการเพิ่มเติม'}
+                        </p>
+                      </div>
                     </div>
                   ) : (
                     <div className="mt-3 space-y-3">

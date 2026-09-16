@@ -318,7 +318,11 @@ function AppContent() {
       }
       setLoading(false);
     });
-    return () => unsubscribe();
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
   }, []);
 
   useEffect(() => {

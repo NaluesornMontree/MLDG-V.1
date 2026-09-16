@@ -1,5 +1,5 @@
 // ไฟล์: BookingFlow.js
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, addDoc, doc, setDoc, getDocs, query, where, Timestamp } from "firebase/firestore";
 import { CheckIcon, UserIcon, WrenchIcon } from './AppIcons';
@@ -17,11 +17,17 @@ import { areSelectedSlotsContiguous, isSelectedSlotsDraftValid } from '../utils/
 import { toWholeNumber } from '../utils/numberUtils';
 import useClubRentalRate from '../utils/useClubRentalRate';
 
+const getLocalDateValue = (date = new Date()) => {
+    const offset = date.getTimezoneOffset();
+    return new Date(date.getTime() - (offset * 60 * 1000)).toISOString().split('T')[0];
+};
+
 const BookingFlow = ({ user, userData }) => {
     const { clubRentalRate, clubRentalRateLoading } = useClubRentalRate();
+    const todayDateValue = getLocalDateValue();
     const [step, setStep] = useState(1);
     const [bookingData, setBookingData] = useState({
-        date: '',
+        date: todayDateValue,
         customerName: '',
         phone: '',
         guests: 1,
@@ -56,6 +62,19 @@ const BookingFlow = ({ user, userData }) => {
         setModal({ isOpen: true, message, type });
     };
 
+    const isPastBookingDate = (dateValue) => Boolean(dateValue && dateValue < todayDateValue);
+
+    const handleBookingDateChange = (dateValue) => {
+        const safeDate = !dateValue || isPastBookingDate(dateValue) ? todayDateValue : dateValue;
+        setBookingData({ ...bookingData, date: safeDate });
+        setSelectedSlots({});
+        setClubCart([]);
+
+        if (dateValue && dateValue < todayDateValue) {
+            showAlert('ไม่สามารถจองวันย้อนหลังได้ กรุณาเลือกวันที่วันนี้หรือวันที่ในอนาคต', 'warning');
+        }
+    };
+
     const closeModal = () => {
         setModal({ ...modal, isOpen: false });
         if (modal.type === 'success') {
@@ -63,21 +82,29 @@ const BookingFlow = ({ user, userData }) => {
         }
     };
 
-    const getMemberName = () => (
-        userData?.FullName ||
-        userData?.fullName ||
-        userData?.displayName ||
-        user?.displayName ||
-        ''
+    const getMemberName = useCallback(() => (
+        String(
+            userData?.FullName ||
+            userData?.fullName ||
+            userData?.displayName ||
+            user?.displayName ||
+            ''
+        ).trim()
+    ), [userData, user?.displayName]);
+
+    const normalizeMemberPhone = (value = '') => (
+        String(value || '').replace(/\D/g, '').slice(0, 10)
     );
 
-    const getMemberPhone = () => (
+    const getMemberPhone = useCallback(() => normalizeMemberPhone(
         userData?.PhoneNumber ||
         userData?.phoneNumber ||
         userData?.phone ||
+        userData?.Contact_Phone ||
+        userData?.Customer_Phone ||
         user?.phoneNumber ||
         ''
-    );
+    ), [userData, user?.phoneNumber]);
 
     const getMemberEmail = () => (
         userData?.Email ||
@@ -85,6 +112,28 @@ const BookingFlow = ({ user, userData }) => {
         user?.email ||
         ''
     );
+
+    useEffect(() => {
+        const memberName = getMemberName();
+        const memberPhone = getMemberPhone();
+
+        if (!memberName && !memberPhone) return;
+
+        setBookingData((prev) => {
+            const nextCustomerName = prev.customerName || memberName;
+            const nextPhone = prev.phone || memberPhone;
+
+            if (nextCustomerName === prev.customerName && nextPhone === prev.phone) {
+                return prev;
+            }
+
+            return {
+                ...prev,
+                customerName: nextCustomerName,
+                phone: nextPhone
+            };
+        });
+    }, [getMemberName, getMemberPhone]);
 
     const proceedToCustomerDetails = () => {
         if (!areSelectedSlotsContiguous(selectedSlots, TIME_SLOTS)) {
@@ -103,6 +152,11 @@ const BookingFlow = ({ user, userData }) => {
     const checkShopClosureStatus = async () => {
         if (!bookingData.date) {
             showAlert("กรุณาระบุวันที่ก่อนดำเนินการต่อ", 'warning');
+            return;
+        }
+        if (isPastBookingDate(bookingData.date)) {
+            showAlert('ไม่สามารถจองวันย้อนหลังได้ กรุณาเลือกวันที่วันนี้หรือวันที่ในอนาคต', 'warning');
+            setBookingData((prev) => ({ ...prev, date: todayDateValue }));
             return;
         }
 
@@ -412,6 +466,13 @@ const BookingFlow = ({ user, userData }) => {
             return;
         }
 
+        if (isPastBookingDate(bookingData.date)) {
+            showAlert('ไม่สามารถจองวันย้อนหลังได้ กรุณาเลือกวันที่วันนี้หรือวันที่ในอนาคต', 'warning');
+            setStep(1);
+            setBookingData((prev) => ({ ...prev, date: todayDateValue }));
+            return;
+        }
+
         if (bookingData.needsClubRent && clubRentalRateLoading) {
             showAlert('กำลังโหลดราคาค่าเช่าไม้กอล์ฟ กรุณารอสักครู่แล้วลองอีกครั้ง', 'warning');
             return;
@@ -491,8 +552,9 @@ const BookingFlow = ({ user, userData }) => {
                             <input 
                                 type="date" 
                                 value={bookingData.date}
+                                min={todayDateValue}
                                 className="w-full p-3 bg-white border border-slate-300 rounded-xl text-base font-bold text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" 
-                                onChange={(e) => setBookingData({ ...bookingData, date: e.target.value })}
+                                onChange={(e) => handleBookingDateChange(e.target.value)}
                             />
                         </div>
 
