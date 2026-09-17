@@ -12,6 +12,9 @@ import {
   getEmailActionReturnUrl,
   storeEmailActionResult
 } from '../utils/emailActionUtils';
+import PasswordStrengthMeter, { getPasswordStrength } from './PasswordStrengthMeter';
+import PasswordInput from './PasswordInput';
+import Popup from './Popup';
 
 const actionTasks = new Map();
 
@@ -44,6 +47,7 @@ function EmailActionHandler({ action }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [weakPasswordConfirmOpen, setWeakPasswordConfirmOpen] = useState(false);
 
   const returnUrl = useMemo(
     () => getEmailActionReturnUrl(action.continueUrl),
@@ -155,16 +159,19 @@ function EmailActionHandler({ action }) {
     };
   }, [action.actionCode, action.mode, finishAndRedirect]);
 
-  const handleResetPassword = async (event) => {
-    event.preventDefault();
+  const submitPasswordReset = async (allowWeakPassword = false) => {
     setFormError('');
 
-    if (newPassword.length < 6) {
-      setFormError('รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร');
-      return;
-    }
     if (newPassword !== confirmPassword) {
       setFormError('รหัสผ่านใหม่และการยืนยันรหัสผ่านไม่ตรงกัน');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setFormError('รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร');
+      return;
+    }
+    if (!allowWeakPassword && !getPasswordStrength(newPassword).isAcceptable) {
+      setWeakPasswordConfirmOpen(true);
       return;
     }
 
@@ -182,6 +189,11 @@ function EmailActionHandler({ action }) {
       setFormError(getActionErrorMessage(error));
       setSubmitting(false);
     }
+  };
+
+  const handleResetPassword = async (event) => {
+    event.preventDefault();
+    submitPasswordReset(false);
   };
 
   const handleReturnToApp = () => {
@@ -223,19 +235,18 @@ function EmailActionHandler({ action }) {
 
             <label className="mt-6 block text-sm font-black text-slate-700">
               รหัสผ่านใหม่
-              <input
-                type="password"
+              <PasswordInput
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
                 autoComplete="new-password"
                 className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-bold text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
               />
             </label>
+            <PasswordStrengthMeter password={newPassword} className="mt-3" />
 
             <label className="mt-4 block text-sm font-black text-slate-700">
               ยืนยันรหัสผ่านใหม่
-              <input
-                type="password"
+              <PasswordInput
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 autoComplete="new-password"
@@ -293,6 +304,19 @@ function EmailActionHandler({ action }) {
       <style>
         {`@keyframes emailActionProgress { from { width: 0; } to { width: 100%; } }`}
       </style>
+      <Popup
+        isOpen={weakPasswordConfirmOpen}
+        type="warning"
+        title="รหัสผ่านนี้ยังค่อนข้างง่าย"
+        message="รหัสผ่านที่ตั้งยังเดาง่ายกว่าที่แนะนำ คุณมั่นใจกับรหัสผ่านนี้แล้วใช่ไหม?"
+        confirmLabel="ใช่ ใช้รหัสนี้"
+        cancelLabel="กลับไปแก้ไข"
+        onConfirm={() => {
+          setWeakPasswordConfirmOpen(false);
+          submitPasswordReset(true);
+        }}
+        onCancel={() => setWeakPasswordConfirmOpen(false)}
+      />
     </main>
   );
 }

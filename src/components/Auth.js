@@ -8,21 +8,33 @@ import {
   FacebookAuthProvider, // เพิ่มไลบรารีสำหรับ Facebook
   signInWithPopup,
   sendEmailVerification,
-  deleteUser
+  fetchSignInMethodsForEmail
 } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { theme } from '../styles/theme'; 
-import { findUserByPhoneNumber, getDuplicatePhoneMessage, normalizePhoneNumber } from '../utils/userPhoneUtils';
+import {
+  findUserByEmail,
+  findUserByPhoneNumber,
+  getDuplicateEmailMessage,
+  getDuplicatePhoneMessage,
+  normalizeEmail,
+  normalizePhoneNumber
+} from '../utils/userPhoneUtils';
 import { getFirebaseAuthErrorMessage } from '../utils/firebaseErrorMessages';
 import { getEmailActionCodeSettings } from '../utils/emailActionUtils';
+import PasswordStrengthMeter, { getPasswordStrength } from './PasswordStrengthMeter';
+import PasswordInput from './PasswordInput';
+import Popup from './Popup';
 
 function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');      
   const [phoneNumber, setPhoneNumber] = useState('');  
   const [mode, setMode] = useState('login'); 
   const [loading, setLoading] = useState(false);
+  const [weakPasswordConfirmOpen, setWeakPasswordConfirmOpen] = useState(false);
 
   const s = theme.auth; 
   const formSpacingClass = mode === 'register' ? 'space-y-3' : 'space-y-2.5';
@@ -43,50 +55,95 @@ function Auth() {
     return userCred.user;
   };
 
-  const handleAuth = async (e) => {
-    e.preventDefault();
+  const registerWithEmail = async (allowWeakPassword = false) => {
     setLoading(true);
     try {
-      if (mode === 'login') {
-        await signInExistingAccount();
-      } else if (mode === 'register') {
-        const normalizedPhone = normalizePhoneNumber(phoneNumber);
-        if (normalizedPhone.length !== 10) {
-          window.appAlert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
-          return;
-        }
+      const normalizedPhone = normalizePhoneNumber(phoneNumber);
+      const normalizedEmail = normalizeEmail(email);
+      const missingFields = [];
 
-        const userCred = await createUserWithEmailAndPassword(auth, email, password);
+      if (!fullName.trim()) missingFields.push('ชื่อ-นามสกุล');
+      if (!normalizedEmail) missingFields.push('อีเมล');
+      if (!password) missingFields.push('รหัสผ่าน');
+      if (!confirmPassword) missingFields.push('ยืนยันรหัสผ่าน');
+      if (!normalizedPhone) missingFields.push('เบอร์โทรศัพท์');
 
-        const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone, userCred.user.uid);
-        if (duplicatePhoneUser) {
-          await deleteUser(userCred.user);
-          window.appAlert(getDuplicatePhoneMessage(normalizedPhone));
-          return;
-        }
-        
-        await sendEmailVerification(userCred.user, getEmailActionCodeSettings());
-
-        await setDoc(doc(db, "users", userCred.user.uid), {
-          User_ID: userCred.user.uid,
-          Email: email,
-          FullName: fullName,
-          PhoneNumber: normalizedPhone,
-          Role: 'customer', 
-          Points_Balance: 0, 
-          Is_Active: true,
-          CreatedAt: new Date()
-        });
-        
-        setMode('login');
+      if (missingFields.length > 0) {
+        window.appAlert(`สมัครสมาชิกไม่สำเร็จ เพราะกรอกข้อมูลไม่ครบ: ${missingFields.join(', ')}`);
+        return;
       }
+
+      if (normalizedPhone.length !== 10) {
+        window.appAlert("สมัครสมาชิกไม่สำเร็จ เพราะเบอร์โทรศัพท์ต้องมี 10 หลัก");
+        return;
+      }
+      if (password !== confirmPassword) {
+        window.appAlert("สมัครสมาชิกไม่สำเร็จ เพราะรหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน");
+        return;
+      }
+      if (password.length < 8) {
+        window.appAlert("สมัครสมาชิกไม่สำเร็จ เพราะรหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร");
+        return;
+      }
+      const duplicateEmailUser = await findUserByEmail(db, normalizedEmail);
+      if (duplicateEmailUser) {
+        window.appAlert(getDuplicateEmailMessage(normalizedEmail));
+        return;
+      }
+      const existingSignInMethods = await fetchSignInMethodsForEmail(auth, normalizedEmail);
+      if (existingSignInMethods.length > 0) {
+        window.appAlert(getDuplicateEmailMessage(normalizedEmail));
+        return;
+      }
+      const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone);
+      if (duplicatePhoneUser) {
+        window.appAlert(getDuplicatePhoneMessage(normalizedPhone));
+        return;
+      }
+      if (!allowWeakPassword && !getPasswordStrength(password).isAcceptable) {
+        setWeakPasswordConfirmOpen(true);
+        return;
+      }
+
+      const userCred = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+
+      await sendEmailVerification(userCred.user, getEmailActionCodeSettings());
+
+      await setDoc(doc(db, "users", userCred.user.uid), {
+        User_ID: userCred.user.uid,
+        Email: normalizedEmail,
+        FullName: fullName,
+        PhoneNumber: normalizedPhone,
+        Role: 'customer',
+        Points_Balance: 0,
+        Is_Active: true,
+        CreatedAt: new Date()
+      });
+
+      setMode('login');
     } catch (err) {
-      const fallbackMessage = mode === 'login'
-        ? 'ไม่สามารถเข้าสู่ระบบได้ กรุณาตรวจสอบอีเมลและรหัสผ่านแล้วลองอีกครั้ง'
-        : 'ไม่สามารถสมัครสมาชิกได้ กรุณาตรวจสอบข้อมูลแล้วลองอีกครั้ง';
-      window.appAlert(getFirebaseAuthErrorMessage(err, fallbackMessage));
+      window.appAlert(`สมัครสมาชิกไม่สำเร็จ: ${getFirebaseAuthErrorMessage(err, 'กรุณาตรวจสอบข้อมูลแล้วลองอีกครั้ง')}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    if (mode === 'login') {
+      setLoading(true);
+      try {
+        await signInExistingAccount();
+      } catch (err) {
+        window.appAlert(getFirebaseAuthErrorMessage(err, 'ไม่สามารถเข้าสู่ระบบได้ กรุณาตรวจสอบอีเมลและรหัสผ่านแล้วลองอีกครั้ง'));
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (mode === 'register') {
+      await registerWithEmail(false);
     }
   };
 
@@ -250,14 +307,29 @@ function Auth() {
           />
           
           {mode !== 'forgot' && (
-            <input 
-              type="password" 
-              value={password} 
-              onChange={(e)=>setPassword(e.target.value)} 
-              className={compactInputClass} 
-              placeholder="Password" 
-              required 
-            />
+            <>
+              <PasswordInput
+                value={password}
+                onChange={(e)=>setPassword(e.target.value)}
+                className={compactInputClass}
+                placeholder="Password"
+                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                required
+              />
+              {mode === 'register' && (
+                <>
+                  <PasswordInput
+                    value={confirmPassword}
+                    onChange={(e)=>setConfirmPassword(e.target.value)}
+                    className={compactInputClass}
+                    placeholder="Confirm Password"
+                    autoComplete="new-password"
+                    required
+                  />
+                  <PasswordStrengthMeter password={password} className="!mt-2" />
+                </>
+              )}
+            </>
           )}
 
           <button type="submit" disabled={loading} className={s.btnPrimary}>
@@ -298,7 +370,10 @@ function Auth() {
         <div className="mt-8 flex flex-col gap-3 items-center">
           <button 
             type="button" 
-            onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
+            onClick={() => {
+              setMode(mode === 'login' ? 'register' : 'login');
+              setConfirmPassword('');
+            }}
             className="rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-2.5 text-sm font-black text-emerald-700 transition-all hover:border-emerald-200 hover:bg-emerald-100"
           >
             {mode === 'login' ? 'สมัครสมาชิกใหม่' : 'กลับไปหน้าเข้าสู่ระบบ'}
@@ -316,6 +391,19 @@ function Auth() {
         </div>
         </div>
       </div>
+      <Popup
+        isOpen={weakPasswordConfirmOpen}
+        type="warning"
+        title="รหัสผ่านนี้ยังค่อนข้างง่าย"
+        message="รหัสผ่านที่ตั้งยังเดาง่ายกว่าที่แนะนำ คุณมั่นใจกับรหัสผ่านนี้แล้วใช่ไหม?"
+        confirmLabel="ใช่ ใช้รหัสนี้"
+        cancelLabel="กลับไปแก้ไข"
+        onConfirm={() => {
+          setWeakPasswordConfirmOpen(false);
+          registerWithEmail(true);
+        }}
+        onCancel={() => setWeakPasswordConfirmOpen(false)}
+      />
     </div>
   );
 }

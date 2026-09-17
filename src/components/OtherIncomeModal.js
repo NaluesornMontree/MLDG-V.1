@@ -703,44 +703,61 @@ function OtherIncomeModal({
                   </div>
                 </div>
                 {needsClubRent && (
-                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-black text-emerald-800">เลือกไม้กอล์ฟสำหรับเช่า</span>
-                      <span className="text-[10px] font-bold text-emerald-700">
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+                    <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <span className="text-sm font-black text-emerald-800">เลือกไม้กอล์ฟสำหรับเช่า</span>
+                      <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-black text-emerald-700">
                         เลือกแล้ว {selectedClubs.reduce((sum, item) => sum + Number(item.qty || 0), 0)} ชิ้น
                       </span>
                     </div>
                     {clubsLoading ? (
-                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-4 text-center text-[11px] font-bold text-slate-400">
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-5 text-center text-xs font-bold text-slate-400">
                         กำลังโหลดข้อมูลไม้กอล์ฟ...
                       </div>
                     ) : clubInventory.length === 0 ? (
-                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-4 text-center text-[11px] font-bold text-slate-400">
+                      <div className="rounded-xl border border-slate-200 bg-white px-3 py-5 text-center text-xs font-bold text-slate-400">
                         ไม่มีไม้กอล์ฟพร้อมให้เช่าในตอนนี้
                       </div>
                     ) : (
-                      <div className="max-h-52 space-y-2 overflow-y-auto pr-1">
+                      <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
                         {clubInventory.map((club) => {
                           const selectedItem = selectedClubs.find((item) => item.clubId === club.id);
                           const qty = selectedItem ? Number(selectedItem.qty || 0) : 0;
+                          const isSelected = qty > 0;
                           return (
-                            <div key={club.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <div className="text-xs font-black text-slate-800">{club.name}</div>
-                                  <div className="text-[10px] font-bold text-slate-400">{club.type || 'ไม่ระบุประเภทไม้'}</div>
-                                  <div className="mt-0.5 text-[10px] font-bold text-emerald-600">พร้อมใช้งาน {club.available} ชิ้น</div>
+                            <div
+                              key={club.id}
+                              className={`relative overflow-hidden rounded-2xl border px-4 py-3 shadow-sm transition-all ${
+                                isSelected
+                                  ? 'border-emerald-300 bg-emerald-50 ring-1 ring-emerald-100'
+                                  : 'border-slate-200 bg-white hover:border-emerald-200'
+                              }`}
+                            >
+                              <div className={`absolute left-0 top-0 h-full w-1 ${isSelected ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+                              <div className="flex items-start justify-between gap-3 pl-1">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <div className="break-words text-sm font-black leading-snug text-slate-900">{club.name}</div>
+                                    {isSelected && (
+                                      <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-black text-white">
+                                        {qty} ชิ้น
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="mt-1 text-xs font-bold text-slate-500">{club.type || 'ไม่ระบุประเภทไม้'}</div>
+                                  <div className="mt-1.5 inline-flex rounded-full border border-emerald-100 bg-white px-2.5 py-0.5 text-[11px] font-black text-emerald-700">พร้อมใช้งาน {club.available} ชิ้น</div>
                                 </div>
-                                <div className="shrink-0 text-right text-[10px] font-bold text-slate-400">
+                                <div className="shrink-0 rounded-xl border border-slate-100 bg-white px-2.5 py-2 text-right text-xs font-bold text-slate-400">
                                   ราคาเช่า/ชิ้น
-                                  <div className="text-xs font-black text-slate-800">
+                                  <div className="text-sm font-black text-emerald-800">
                                     {clubRentalRateLoading
                                       ? 'กำลังโหลดราคา...'
                                       : `${clubRentalRate.toLocaleString('th-TH')} บาท`}
                                   </div>
                                 </div>
                               </div>
-                              <div className="mt-2 flex justify-end">
+                              <div className="mt-3 flex items-center justify-between gap-3 pl-1">
+                                <span className="text-[11px] font-bold text-slate-400">จำนวน</span>
                                 <QuantityAdjuster
                                   value={qty}
                                   onChange={(value) => handleClubQtyChange(club, Number(value) - qty)}

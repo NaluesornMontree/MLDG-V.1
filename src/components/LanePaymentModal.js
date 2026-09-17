@@ -9,6 +9,7 @@ import {
   increment,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where
 } from 'firebase/firestore';
@@ -685,8 +686,8 @@ function LanePaymentModal({
       const shouldReleaseWholeLanes = booking.releaseAllSlotsForLanes || booking.releaseAllSlotsForLane;
       const nextDetailedSlots = checkoutLaneKeys.length > 0
       ? checkoutLaneKeys.reduce((currentSlots, laneKey) => {
-          const releaseSlots = shouldReleaseWholeLanes
-            ? (checkoutDetailedSlots?.[laneKey] || baseDetailedSlots[laneKey] || checkoutSlots)
+        const releaseSlots = shouldReleaseWholeLanes
+            ? (baseDetailedSlots[laneKey] || checkoutDetailedSlots?.[laneKey] || checkoutSlots)
             : checkoutDetailedSlots?.[laneKey] || checkoutSlots;
           return removeSlotsFromDetailedSlots(currentSlots, laneKey, releaseSlots);
         }, baseDetailedSlots)
@@ -694,7 +695,7 @@ function LanePaymentModal({
       const nextActiveDetailedSlots = checkoutLaneKeys.length > 0
       ? checkoutLaneKeys.reduce((currentSlots, laneKey) => {
           const releaseSlots = shouldReleaseWholeLanes
-            ? (checkoutDetailedSlots?.[laneKey] || baseActiveDetailedSlots[laneKey] || baseDetailedSlots[laneKey] || checkoutSlots)
+            ? (baseActiveDetailedSlots[laneKey] || baseDetailedSlots[laneKey] || checkoutDetailedSlots?.[laneKey] || checkoutSlots)
             : checkoutDetailedSlots?.[laneKey] || checkoutSlots;
           return removeSlotsFromDetailedSlots(currentSlots, laneKey, releaseSlots);
         }, baseActiveDetailedSlots)
@@ -743,7 +744,7 @@ function LanePaymentModal({
 
       if (checkoutLaneNumbers.length > 0) {
         await Promise.all(checkoutLaneNumbers.map((laneNumber) => (
-          updateDoc(doc(db, 'lanes', `lane_${laneNumber}`), { status: 'available' })
+          setDoc(doc(db, 'lanes', `lane_${laneNumber}`), { status: 'available' }, { merge: true })
         )));
       }
 

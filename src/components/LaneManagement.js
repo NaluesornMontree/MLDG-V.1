@@ -1196,21 +1196,21 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
       
       {/* เธชเนเธงเธเธซเธฑเธงเธเธฒเธฃเธเธฑเธ”เธเธฒเธฃเนเธฅเธฐเธเธเธดเธ—เธดเธเธเนเธญเธเน€เธเนเธฒ */}
       <div className="border-b border-slate-200 pb-4 mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-slate-800">{publicView ? 'ตารางการใช้เลนซ้อม' : 'กระดานควบคุมผังเวลาและเลนซ้อมกอล์ฟ'}</h2>
+        <div className="min-w-0">
+          <h2 className="text-xl font-black leading-tight text-slate-800 sm:text-2xl">{publicView ? 'ตารางการใช้เลนซ้อม' : 'กระดานควบคุมผังเวลาและเลนซ้อมกอล์ฟ'}</h2>
           {publicView && (
             <p className="mt-1 text-xs font-bold text-slate-400">
               ตรวจสอบสถานะเลนซ้อมได้ทันที หากต้องการจองเลนกรุณาเข้าสู่ระบบสมาชิก
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 p-2.5 rounded-2xl w-full md:w-auto">
-          <label className="text-xs font-black text-indigo-700 uppercase tracking-wider pl-1">เลือกวันที่ตรวจสอบ :</label>
+        <div className="flex w-full flex-col gap-2 rounded-2xl border border-indigo-100 bg-indigo-50 p-2.5 sm:flex-row sm:items-center md:w-auto">
+          <label className="pl-1 text-xs font-black uppercase tracking-wider text-indigo-700">เลือกวันที่ตรวจสอบ :</label>
           <input 
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="bg-white border border-indigo-200 p-1.5 rounded-xl text-sm font-bold text-slate-700 focus:outline-none"
+            className="w-full rounded-xl border border-indigo-200 bg-white p-2 text-sm font-bold text-slate-700 focus:outline-none sm:w-auto sm:p-1.5"
           />
         </div>
       </div>
@@ -1518,43 +1518,65 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
       {/* Component เธขเนเธญเธขเธชเธณเธซเธฃเธฑเธเธ”เธนเนเธฅเธฐเนเธเนเนเธเธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เธเธฒเธฃเธเธญเธ */}
       {walkInModalStep === 'clubs' && !isShopClosed && !publicView && (
         <div className="fixed inset-0 bg-black/50 flex items-start sm:items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto">
-          <div className="w-full max-w-md bg-white p-4 sm:p-6 rounded-3xl sm:rounded-[2rem] shadow-2xl border text-left">
-            <h3 className="text-xl font-black text-slate-800 border-b pb-2 mb-4">เลือกไม้กอล์ฟสำหรับเช่า</h3>
-            <div className="space-y-3">
-              <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600">
+          <div className="w-full max-w-3xl bg-white p-4 sm:p-7 rounded-3xl sm:rounded-[2rem] shadow-2xl border text-left">
+            <div className="mb-5 border-b border-slate-100 pb-4">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Rental Clubs</p>
+              <h3 className="mt-1 text-2xl font-black text-slate-900">เลือกไม้กอล์ฟสำหรับเช่า</h3>
+            </div>
+            <div className="space-y-4">
+              <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-base font-bold text-slate-600">
                 ลูกค้า: <span className="text-slate-800">{walkInName || '-'}</span>
               </div>
               {walkInClubsLoading ? (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm font-bold text-slate-400">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm font-bold text-slate-400">
                   กำลังโหลดข้อมูลไม้กอล์ฟ...
                 </div>
               ) : walkInClubInventory.length === 0 ? (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm font-bold text-slate-400">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm font-bold text-slate-400">
                   ไม่มีไม้กอล์ฟพร้อมให้เช่าในตอนนี้
                 </div>
               ) : (
-                <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
+                <div className="grid max-h-[52vh] grid-cols-1 gap-3 overflow-y-auto pr-1 lg:grid-cols-2">
                   {walkInClubInventory.map((club) => {
                     const selectedItem = walkInSelectedClubs.find((item) => item.clubId === club.id);
                     const qty = selectedItem ? Number(selectedItem.qty || 0) : 0;
+                    const isSelected = qty > 0;
                     return (
-                      <div key={club.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-black text-slate-800">{club.name}</div>
-                            <div className="text-xs font-bold text-slate-400">{club.type || 'ไม่ระบุประเภทไม้'}</div>
-                            <div className="mt-1 text-xs font-bold text-emerald-600">พร้อมใช้งาน {club.available} ชิ้น</div>
+                      <div
+                        key={club.id}
+                        className={`relative overflow-hidden rounded-3xl border px-4 py-4 shadow-sm transition-all ${
+                          isSelected
+                            ? 'border-emerald-300 bg-emerald-50 shadow-emerald-900/5 ring-1 ring-emerald-100'
+                            : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className={`absolute left-0 top-0 h-full w-1.5 ${isSelected ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+                        <div className="flex items-start justify-between gap-3 pl-1.5">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="break-words text-base font-black leading-snug text-slate-900">{club.name}</div>
+                              {isSelected && (
+                                <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-black text-white">
+                                  เลือก {qty} ชิ้น
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-1 text-xs font-bold text-slate-500">{club.type || 'ไม่ระบุประเภทไม้'}</div>
+                            <div className="mt-2 inline-flex rounded-full border border-emerald-100 bg-white px-3 py-1 text-xs font-black text-emerald-700">
+                              พร้อมใช้งาน {club.available} ชิ้น
+                            </div>
                           </div>
-                          <div className="shrink-0 text-right">
-                            <div className="text-xs font-bold text-slate-400">ราคาเช่า/ชิ้น</div>
-                            <div className="text-sm font-black text-slate-800">
+                          <div className="shrink-0 rounded-2xl border border-slate-100 bg-white px-3 py-2 text-right">
+                            <div className="text-[11px] font-bold text-slate-400">ราคาเช่า/ชิ้น</div>
+                            <div className="text-base font-black text-emerald-800">
                               {clubRentalRateLoading
                                 ? 'กำลังโหลดราคา...'
                                 : `${clubRentalRate.toLocaleString('th-TH')} บาท`}
                             </div>
                           </div>
                         </div>
-                        <div className="mt-3 flex justify-end">
+                        <div className="mt-4 flex items-center justify-between gap-3 pl-1.5">
+                          <span className="text-xs font-bold text-slate-400">จำนวนที่ต้องการเช่า</span>
                           <QuantityAdjuster
                             value={qty}
                             onChange={(value) => handleWalkInClubQtyChange(club, Number(value) - qty)}

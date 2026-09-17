@@ -2,6 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+.password-input-native-hide::-ms-reveal,
+.password-input-native-hide::-ms-clear {
+  display: none;
+}
+
+.password-input-native-hide::-webkit-credentials-auto-fill-button {
+  visibility: hidden;
+  display: none !important;
+  pointer-events: none;
+}
+
 html,
 body,
 #root {
@@ -12,6 +23,15 @@ body,
 
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+:root {
+  --breakpoint-mobile: 640px;
+  --breakpoint-tablet: 768px;
+  --breakpoint-desktop: 1024px;
+  --app-safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @keyframes screenEnter {
@@ -108,6 +128,7 @@ video,
 canvas,
 svg {
   max-width: 100%;
+  height: auto;
 }
 
 button,
@@ -118,8 +139,298 @@ textarea {
   min-width: 0;
 }
 
+p,
+span,
+label,
+button,
+a,
+div {
+  overflow-wrap: anywhere;
+}
+
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
 table {
   max-width: 100%;
+}
+
+.responsive-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+.responsive-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dashboard-page-transition,
+.modal-card-transition {
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .responsive-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .responsive-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .responsive-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  body {
+    font-size: 15px;
+  }
+
+  .dashboard-page-transition {
+    width: 100%;
+  }
+
+  .gap-10 {
+    gap: 1.5rem !important;
+  }
+
+  .gap-8,
+  .gap-6 {
+    gap: 1.25rem !important;
+  }
+
+  .p-10 {
+    padding: 1.75rem !important;
+  }
+
+  .p-8 {
+    padding: 1.5rem !important;
+  }
+
+  .p-7,
+  .p-6 {
+    padding: 1.25rem !important;
+  }
+
+  .px-10,
+  .px-8 {
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+  }
+
+  .py-8,
+  .py-7,
+  .py-6 {
+    padding-top: 1.25rem !important;
+    padding-bottom: 1.25rem !important;
+  }
+
+  .rounded-\[3rem\],
+  .rounded-\[2\.5rem\],
+  .rounded-\[2rem\],
+  .rounded-3xl {
+    border-radius: 1.5rem !important;
+  }
+
+  .text-6xl {
+    font-size: 3rem !important;
+    line-height: 3.35rem !important;
+  }
+
+  .text-5xl {
+    font-size: 2.5rem !important;
+    line-height: 2.9rem !important;
+  }
+}
+
+@media (max-width: 639px) {
+  body {
+    font-size: 15px;
+  }
+
+  .dashboard-page-transition * {
+    min-width: 0;
+  }
+
+  .truncate {
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: normal !important;
+  }
+
+  button,
+  a,
+  label {
+    white-space: normal;
+  }
+
+  .gap-10,
+  .gap-8,
+  .gap-6,
+  .gap-5 {
+    gap: 1rem !important;
+  }
+
+  .gap-4 {
+    gap: 0.875rem !important;
+  }
+
+  .p-10,
+  .p-9,
+  .p-8,
+  .p-7,
+  .p-6 {
+    padding: 1rem !important;
+  }
+
+  .p-5 {
+    padding: 0.875rem !important;
+  }
+
+  .px-10,
+  .px-9,
+  .px-8,
+  .px-7,
+  .px-6 {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  .py-8,
+  .py-7,
+  .py-6,
+  .py-5 {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+  }
+
+  .mb-10,
+  .mb-8,
+  .mb-7,
+  .mb-6 {
+    margin-bottom: 1rem !important;
+  }
+
+  .mt-10,
+  .mt-8,
+  .mt-7,
+  .mt-6 {
+    margin-top: 1rem !important;
+  }
+
+  .rounded-\[3rem\],
+  .rounded-\[2\.5rem\],
+  .rounded-\[2rem\],
+  .rounded-3xl {
+    border-radius: 1.25rem !important;
+  }
+
+  .rounded-2xl {
+    border-radius: 1rem !important;
+  }
+
+  .shadow-2xl,
+  .shadow-xl {
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12) !important;
+  }
+
+  .text-6xl {
+    font-size: 2rem !important;
+    line-height: 2.375rem !important;
+  }
+
+  .text-5xl {
+    font-size: 1.875rem !important;
+    line-height: 2.25rem !important;
+  }
+
+  .text-4xl {
+    font-size: 1.75rem !important;
+    line-height: 2.125rem !important;
+  }
+
+  .text-3xl {
+    font-size: 1.5rem !important;
+    line-height: 1.875rem !important;
+  }
+
+  .text-2xl {
+    font-size: 1.25rem !important;
+    line-height: 1.625rem !important;
+  }
+
+  .text-xl {
+    font-size: 1.125rem !important;
+    line-height: 1.5rem !important;
+  }
+
+  .text-lg {
+    font-size: 1rem !important;
+    line-height: 1.375rem !important;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    min-height: 2.5rem;
+  }
+
+  table {
+    width: max-content;
+    min-width: 100%;
+  }
+
+  th,
+  td {
+    white-space: nowrap;
+  }
+
+  .modal-card-transition {
+    max-width: calc(100vw - 1rem);
+    border-radius: 1.5rem !important;
+  }
+
+  .dashboard-page-transition {
+    width: 100%;
+  }
+
+  .mobile-safe-bottom {
+    padding-bottom: calc(7rem + var(--app-safe-bottom));
+  }
+
+  .text-\[10px\] {
+    font-size: 0.6875rem !important;
+    line-height: 0.95rem !important;
+  }
+
+  .text-\[11px\] {
+    font-size: 0.75rem !important;
+    line-height: 1rem !important;
+  }
+
+  .text-xs {
+    font-size: 0.75rem !important;
+    line-height: 1rem !important;
+  }
 }
 
 /* Keep compact labels readable across dashboard, tables, cards, and popups. */

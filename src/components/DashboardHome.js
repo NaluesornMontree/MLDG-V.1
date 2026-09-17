@@ -138,7 +138,7 @@ const buildFilteredRevenueReport = (payments = [], range = 'year', month, year, 
   const { start, end } = getReportRange(range, month, year, customStart, customEnd);
   const filteredPayments = payments.filter((payment) => {
     const date = getPaymentDate(payment);
-    return date && date >= start && date <= end;
+    return payment.status !== 'cancelled' && date && date >= start && date <= end;
   });
   const daily = [];
   const cursor = new Date(start);
@@ -576,6 +576,7 @@ function OwnerRevenueOverview({
   year,
   customStart,
   customEnd,
+  availableYears = [],
   onRangeChange,
   onMonthChange,
   onYearChange,
@@ -594,12 +595,18 @@ function OwnerRevenueOverview({
         ? `รายเดือน ${MONTH_LABELS_TH[month]} ${year + 543}`
         : `รายปี ${year + 543}`;
   const averageLabel = range === 'year' ? 'เฉลี่ยต่อเดือน' : 'เฉลี่ยต่อวัน';
-  const averageDivisor = range === 'year' ? 12 : range === '7days' ? 7 : 1;
+  const averageDivisor = range === 'year'
+    ? 12
+    : range === 'month'
+      ? new Date(year, month + 1, 0).getDate()
+      : range === '7days'
+        ? 7
+        : Math.max(report.dayCount || 1, 1);
   const isCustomSingleDay = range === 'custom' && report.dayCount === 1;
   const isDailyBars = range === '7days' || (range === 'custom' && report.dayCount > 1 && report.dayCount <= 7);
   const isDonut = range === 'today' || range === 'month' || range === 'custom' || isCustomSingleDay;
   const showRangeTotal = range === 'custom';
-  const showAverage = range === 'custom' || range === '7days' || range === 'year';
+  const showAverage = range === 'custom' || range === '7days' || range === 'month' || range === 'year';
   const showBestMonth = range === 'year';
   const visibleReportCards = 2 + Number(showRangeTotal) + Number(showAverage) + Number(showBestMonth);
   const reportGridColumns = visibleReportCards === 5
@@ -682,7 +689,7 @@ function OwnerRevenueOverview({
                 className="min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-sm outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50"
                 aria-label="เลือกปีรายงาน"
               >
-                {Array.from({ length: 6 }, (_, index) => new Date().getFullYear() - index).map((optionYear) => (
+                {availableYears.map((optionYear) => (
                   <option key={optionYear} value={optionYear}>{optionYear + 543}</option>
                 ))}
               </select>
@@ -964,6 +971,14 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
           ['ข้อมูลโปรไฟล์', 'แก้ไขข้อมูลส่วนตัวและรหัสผ่าน', 'user', 'profile']
         ];
 
+  const revenueYearOptions = Array.from(new Set([
+    new Date().getFullYear(),
+    reportYear,
+    ...stats.revenuePayments
+      .map((payment) => getPaymentDate(payment)?.getFullYear())
+      .filter(Number.isFinite)
+  ])).sort((a, b) => b - a);
+
   const managementCards = [
     {
       key: 'bookingsToday',
@@ -1130,6 +1145,7 @@ function DashboardHome({ role = 'customer', user, userData, onNavigate }) {
                   year={reportYear}
                   customStart={customReportStart}
                   customEnd={customReportEnd}
+                  availableYears={revenueYearOptions}
                   onRangeChange={setReportRange}
                   onMonthChange={setReportMonth}
                   onYearChange={setReportYear}

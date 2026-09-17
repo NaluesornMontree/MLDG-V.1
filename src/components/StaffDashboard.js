@@ -68,7 +68,7 @@ function StaffDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
         className={`fixed bottom-0 left-0 right-0 z-50 ${mobileMenuOpen ? 'max-h-[82dvh] overflow-y-auto' : 'overflow-hidden'} bg-emerald-950 text-white p-2 shadow-2xl border-t border-emerald-800/70 transition-all duration-300 md:inset-y-0 md:right-auto md:h-dvh md:max-h-none md:shrink-0 md:overflow-y-auto md:p-5 md:border-t-0 md:flex md:flex-col md:justify-between ${sidebarCollapsed ? 'md:w-24' : 'md:w-72'}`}
         style={{
           backgroundImage: "linear-gradient(to bottom, rgba(2,44,34,0.88), rgba(2,44,34,0.72), rgba(2,44,34,0.84)), url('/sidebar-cover-v2.jpg')",
-          backgroundSize: '100% 100%',
+          backgroundSize: 'cover',
           backgroundPosition: 'top center',
           backgroundRepeat: 'no-repeat',
           backgroundAttachment: 'local'
@@ -161,7 +161,7 @@ function StaffDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
       </div>
 
       {/* Main Content */}
-      <div className={`min-w-0 flex-1 p-4 ${mobileMenuOpen ? 'pb-[24rem]' : 'pb-28'} transition-all duration-300 md:p-10 md:pb-10 overflow-y-auto ${sidebarCollapsed ? 'md:ml-24' : 'md:ml-72'}`}>
+      <div className={`min-w-0 flex-1 p-4 ${mobileMenuOpen ? 'pb-[24rem]' : 'pb-28'} mobile-safe-bottom transition-all duration-300 md:p-10 md:pb-10 overflow-y-auto ${sidebarCollapsed ? 'md:ml-24' : 'md:ml-72'}`}>
         <BillingRequestNotifier
           onOpenPayment={(bookingId) => {
             setCheckoutBookingId(bookingId);

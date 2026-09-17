@@ -1,10 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { db, secondaryAuth } from '../firebase'; 
 import { collection, getDocs, doc, updateDoc, setDoc } from "firebase/firestore";
-import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
+import { createUserWithEmailAndPassword, fetchSignInMethodsForEmail, signOut } from "firebase/auth";
 import { theme } from '../styles/theme';
 import Popup from './Popup';
-import { findUserByPhoneNumber, getDuplicatePhoneMessage, normalizePhoneNumber } from '../utils/userPhoneUtils';
+import {
+  findUserByEmail,
+  findUserByPhoneNumber,
+  getDuplicateEmailMessage,
+  getDuplicatePhoneMessage,
+  normalizeEmail,
+  normalizePhoneNumber
+} from '../utils/userPhoneUtils';
+import PasswordStrengthMeter, { getPasswordStrength } from './PasswordStrengthMeter';
+import { getFirebaseAuthErrorMessage } from '../utils/firebaseErrorMessages';
+import PasswordInput from './PasswordInput';
 
 function StaffManagement() {
   const [staffs, setStaffs] = useState([]);
@@ -13,9 +23,10 @@ function StaffManagement() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [weakPasswordConfirmOpen, setWeakPasswordConfirmOpen] = useState(false);
 
   // เพิ่ม Role ในการสร้างบัญชีใหม่ (เผื่ออนาคตต้องการเลือกสร้างทั้ง Owner หรือ Staff)
-  const [newStaff, setNewStaff] = useState({ FullName: '', Email: '', PhoneNumber: '', Password: '', Role: 'staff' });
+  const [newStaff, setNewStaff] = useState({ FullName: '', Email: '', PhoneNumber: '', Password: '', ConfirmPassword: '', Role: 'staff' });
   const [editData, setEditData] = useState({ FullName: '', Email: '', PhoneNumber: '', Role: 'staff' });
   const [modal, setModal] = useState({ isOpen: false, id: null, status: null, email: '' });
   
@@ -41,16 +52,45 @@ function StaffManagement() {
 
   useEffect(() => { fetchStaff(); }, []);
 
-  const handleAddStaff = async () => {
-    if (!newStaff.FullName || !newStaff.Email || !newStaff.Password) {
-      window.appAlert("กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน");
-      return;
-    }
-
+  const handleAddStaff = async (allowWeakPassword = false) => {
     try {
       const normalizedPhone = normalizePhoneNumber(newStaff.PhoneNumber);
+      const normalizedEmail = normalizeEmail(newStaff.Email);
+      const missingFields = [];
+
+      if (!newStaff.FullName.trim()) missingFields.push('ชื่อ-นามสกุล');
+      if (!normalizedEmail) missingFields.push('อีเมล');
+      if (!newStaff.Password) missingFields.push('รหัสผ่าน');
+      if (!newStaff.ConfirmPassword) missingFields.push('ยืนยันรหัสผ่าน');
+      if (!normalizedPhone) missingFields.push('เบอร์โทรศัพท์');
+
+      if (missingFields.length > 0) {
+        window.appAlert(`สร้างบัญชีไม่สำเร็จ เพราะกรอกข้อมูลไม่ครบ: ${missingFields.join(', ')}`);
+        return;
+      }
+
       if (normalizedPhone.length !== 10) {
-        window.appAlert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
+        window.appAlert("สร้างบัญชีไม่สำเร็จ เพราะเบอร์โทรศัพท์ต้องมี 10 หลัก");
+        return;
+      }
+      if (newStaff.Password !== newStaff.ConfirmPassword) {
+        window.appAlert("สร้างบัญชีไม่สำเร็จ เพราะรหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน");
+        return;
+      }
+      if (newStaff.Password.length < 8) {
+        window.appAlert("สร้างบัญชีไม่สำเร็จ เพราะรหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร");
+        return;
+      }
+
+      const duplicateEmailUser = await findUserByEmail(db, normalizedEmail);
+      if (duplicateEmailUser) {
+        window.appAlert(getDuplicateEmailMessage(normalizedEmail));
+        return;
+      }
+
+      const existingSignInMethods = await fetchSignInMethodsForEmail(secondaryAuth, normalizedEmail);
+      if (existingSignInMethods.length > 0) {
+        window.appAlert(getDuplicateEmailMessage(normalizedEmail));
         return;
       }
 
@@ -60,9 +100,14 @@ function StaffManagement() {
         return;
       }
 
+      if (!allowWeakPassword && !getPasswordStrength(newStaff.Password).isAcceptable) {
+        setWeakPasswordConfirmOpen(true);
+        return;
+      }
+
       const userCredential = await createUserWithEmailAndPassword(
-        secondaryAuth, 
-        newStaff.Email, 
+        secondaryAuth,
+        normalizedEmail,
         newStaff.Password
       );
       const user = userCredential.user;
@@ -70,7 +115,7 @@ function StaffManagement() {
       await setDoc(doc(db, "users", user.uid), {
         User_ID: user.uid,
         FullName: newStaff.FullName,
-        Email: newStaff.Email,
+        Email: normalizedEmail,
         PhoneNumber: normalizedPhone,
         Role: newStaff.Role, // บันทึก Role ตามที่เลือก
         Is_Active: true,
@@ -79,12 +124,12 @@ function StaffManagement() {
 
       await signOut(secondaryAuth);
 
-      setNewStaff({ FullName: '', Email: '', PhoneNumber: '', Password: '', Role: 'staff' });
+      setNewStaff({ FullName: '', Email: '', PhoneNumber: '', Password: '', ConfirmPassword: '', Role: 'staff' });
       setIsAddModalOpen(false);
       fetchStaff();
       window.appAlert("เพิ่มสมาชิกในทีมและสร้างบัญชีเข้าใช้งานเรียบร้อยแล้ว");
     } catch (err) {
-      window.appAlert("เกิดข้อผิดพลาดในการสร้างบัญชี: " + err.message);
+      window.appAlert(`สร้างบัญชีไม่สำเร็จ: ${getFirebaseAuthErrorMessage(err, 'กรุณาตรวจสอบข้อมูลแล้วลองอีกครั้ง')}`);
     }
   };
 
@@ -96,8 +141,15 @@ function StaffManagement() {
     
     try {
       const normalizedPhone = normalizePhoneNumber(editData.PhoneNumber);
+      const normalizedEmail = normalizeEmail(editData.Email);
       if (normalizedPhone.length !== 10) {
         window.appAlert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
+        return;
+      }
+
+      const duplicateEmailUser = await findUserByEmail(db, normalizedEmail, editingId);
+      if (duplicateEmailUser) {
+        window.appAlert(getDuplicateEmailMessage(normalizedEmail));
         return;
       }
 
@@ -110,7 +162,7 @@ function StaffManagement() {
       const staffRef = doc(db, "users", editingId);
       await updateDoc(staffRef, { 
         FullName: editData.FullName,
-        Email: editData.Email,
+        Email: normalizedEmail,
         PhoneNumber: normalizedPhone,
         Role: editData.Role // อัปเดตบทบาทได้ด้วย
       });
@@ -366,11 +418,16 @@ function StaffManagement() {
               </div>
               <div>
                 <label className={s.inputLabel}>รหัสผ่าน (Password)</label>
-                <input type="password" value={newStaff.Password} onChange={(e) => setNewStaff({...newStaff, Password: e.target.value})} className={s.input} />
+                <PasswordInput value={newStaff.Password} onChange={(e) => setNewStaff({...newStaff, Password: e.target.value})} className={s.input} autoComplete="new-password" />
+              </div>
+              <div>
+                <label className={s.inputLabel}>ยืนยันรหัสผ่าน</label>
+                <PasswordInput value={newStaff.ConfirmPassword} onChange={(e) => setNewStaff({...newStaff, ConfirmPassword: e.target.value})} className={s.input} autoComplete="new-password" />
+                <PasswordStrengthMeter password={newStaff.Password} className="mt-2" />
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              <button onClick={handleAddStaff} className={m.btnConfirm}>ยืนยันการเพิ่มสมาชิก</button>
+              <button onClick={() => handleAddStaff(false)} className={m.btnConfirm}>ยืนยันการเพิ่มสมาชิก</button>
               <button onClick={() => setIsAddModalOpen(false)} className={m.btnCancel}>ยกเลิก</button>
             </div>
           </div>
@@ -384,6 +441,19 @@ function StaffManagement() {
         message={modal.message} 
         onConfirm={() => toggleStaffStatus(modal.id, modal.status)} 
         onCancel={() => setModal({ ...modal, isOpen: false })} 
+      />
+      <Popup
+        isOpen={weakPasswordConfirmOpen}
+        type="warning"
+        title="รหัสผ่านนี้ยังค่อนข้างง่าย"
+        message="รหัสผ่านที่ตั้งยังเดาง่ายกว่าที่แนะนำ คุณมั่นใจกับรหัสผ่านนี้แล้วใช่ไหม?"
+        confirmLabel="ใช่ ใช้รหัสนี้"
+        cancelLabel="กลับไปแก้ไข"
+        onConfirm={() => {
+          setWeakPasswordConfirmOpen(false);
+          handleAddStaff(true);
+        }}
+        onCancel={() => setWeakPasswordConfirmOpen(false)}
       />
     </div>
   );
