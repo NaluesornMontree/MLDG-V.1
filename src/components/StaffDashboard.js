@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import LaneManagement from './LaneManagement';
 import PaymentManager from './PaymentManager';
@@ -8,7 +7,8 @@ import { NavIcon, ResponsiveNavButton } from './DashboardNav';
 import AccountProfileCard from './AccountProfileCard';
 import DashboardHome from './DashboardHome';
 import BillingRequestNotifier from './BillingRequestNotifier';
-import { findUserByPhoneNumber, getDuplicatePhoneMessage, normalizePhoneNumber } from '../utils/userPhoneUtils';
+import { normalizePhoneNumber } from '../utils/userPhoneUtils';
+import { isContactError, saveUserProfileWithContactRegistry } from '../utils/contactRegistryUtils';
 
 function StaffDashboard({ user, userData, handleLogout, onPasswordResetEmailSent }) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -35,18 +35,16 @@ function StaffDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
 
     setUpdatingProfile(true);
     try {
-      const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone, user.uid);
-      if (duplicatePhoneUser) {
-        window.appAlert(getDuplicatePhoneMessage(normalizedPhone));
-        return;
-      }
-
-      await updateDoc(doc(db, "users", user.uid), {
+      await saveUserProfileWithContactRegistry(db, user.uid, {
         FullName: profileForm.FullName.trim(),
         PhoneNumber: normalizedPhone
       });
       window.appAlert("บันทึกการแก้ไขข้อมูลส่วนตัวสำเร็จ");
     } catch (error) {
+      if (isContactError(error)) {
+        window.appAlert(error.message);
+        return;
+      }
       window.appAlert("เกิดข้อผิดพลาด: " + error.message);
     } finally {
       setUpdatingProfile(false);

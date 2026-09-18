@@ -4,7 +4,8 @@ import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firesto
 import { theme } from '../styles/theme';
 import Popup from './Popup';
 import IntegerStepperInput from './IntegerStepperInput';
-import { findUserByPhoneNumber, getDuplicatePhoneMessage, normalizePhoneNumber } from '../utils/userPhoneUtils';
+import { normalizePhoneNumber } from '../utils/userPhoneUtils';
+import { isContactError, saveUserProfileWithContactRegistry } from '../utils/contactRegistryUtils';
 import { toWholeNumber } from '../utils/numberUtils';
 
 function CustomerManagement() {
@@ -98,20 +99,7 @@ function CustomerManagement() {
     }
 
     try {
-      const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone, editingCustomer);
-      if (duplicatePhoneUser) {
-        setAlertPopup({
-          isOpen: true,
-          type: 'warning',
-          title: 'พบเบอร์โทรศัพท์ซ้ำ',
-          message: getDuplicatePhoneMessage(normalizedPhone),
-          onConfirm: () => setAlertPopup((prev) => ({ ...prev, isOpen: false }))
-        });
-        return;
-      }
-
-      const customerRef = doc(db, 'users', editingCustomer);
-      await updateDoc(customerRef, {
+      await saveUserProfileWithContactRegistry(db, editingCustomer, {
         FullName: editForm.FullName,
         PhoneNumber: normalizedPhone,
         Points_Balance: pointsValue
@@ -127,6 +115,16 @@ function CustomerManagement() {
       fetchCustomers();
     } catch (error) {
       console.error('Error updating customer: ', error);
+      if (isContactError(error)) {
+        setAlertPopup({
+          isOpen: true,
+          type: 'warning',
+          title: 'ข้อมูลซ้ำหรือไม่ถูกต้อง',
+          message: error.message,
+          onConfirm: () => setAlertPopup((prev) => ({ ...prev, isOpen: false }))
+        });
+        return;
+      }
       setAlertPopup({
         isOpen: true,
         type: 'danger',

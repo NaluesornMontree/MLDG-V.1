@@ -16,7 +16,8 @@ import {
   getClubType,
   sortGolfClubsLikeInventory
 } from '../utils/golfClubUtils';
-import { findUserByPhoneNumber, getDuplicatePhoneMessage, normalizePhoneNumber } from '../utils/userPhoneUtils';
+import { normalizePhoneNumber } from '../utils/userPhoneUtils';
+import { isContactError, saveUserProfileWithContactRegistry } from '../utils/contactRegistryUtils';
 import { toWholeNumber } from '../utils/numberUtils';
 import useClubRentalRate from '../utils/useClubRentalRate';
 import {
@@ -218,13 +219,7 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
 
     setUpdatingProfile(true);
     try {
-      const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone, user.uid);
-      if (duplicatePhoneUser) {
-        window.appAlert(getDuplicatePhoneMessage(normalizedPhone));
-        return;
-      }
-
-      await setDoc(doc(db, 'users', user.uid), {
+      await saveUserProfileWithContactRegistry(db, user.uid, {
         User_ID: user.uid,
         Email: user.email || userData?.Email || userData?.email || '',
         FullName: profileForm.FullName.trim(),
@@ -232,9 +227,13 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
         Role: userData?.Role || userData?.role || 'customer',
         Is_Active: userData?.Is_Active ?? userData?.isActive ?? true,
         Updated_At: new Date()
-      }, { merge: true });
+      });
       window.appAlert('บันทึกการแก้ไขข้อมูลส่วนตัวสำเร็จเรียบร้อยแล้ว');
     } catch (error) {
+      if (isContactError(error)) {
+        window.appAlert(error.message);
+        return;
+      }
       window.appAlert('เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' + error.message);
     } finally {
       setUpdatingProfile(false);

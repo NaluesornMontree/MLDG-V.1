@@ -8,18 +8,22 @@ import {
   FacebookAuthProvider, // เพิ่มไลบรารีสำหรับ Facebook
   signInWithPopup,
   sendEmailVerification,
-  fetchSignInMethodsForEmail
+  fetchSignInMethodsForEmail,
+  deleteUser
 } from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { theme } from '../styles/theme'; 
 import {
-  findUserByEmail,
-  findUserByPhoneNumber,
   getDuplicateEmailMessage,
-  getDuplicatePhoneMessage,
   normalizeEmail,
   normalizePhoneNumber
 } from '../utils/userPhoneUtils';
+import {
+  assertEmailAvailableForSignup,
+  assertPhoneAvailableForSignup,
+  isContactError,
+  saveUserProfileWithContactRegistry
+} from '../utils/contactRegistryUtils';
 import { getFirebaseAuthErrorMessage } from '../utils/firebaseErrorMessages';
 import { getEmailActionCodeSettings } from '../utils/emailActionUtils';
 import PasswordStrengthMeter, { getPasswordStrength } from './PasswordStrengthMeter';
@@ -39,6 +43,36 @@ function Auth() {
   const s = theme.auth; 
   const formSpacingClass = mode === 'register' ? 'space-y-3' : 'space-y-2.5';
   const compactInputClass = `${s.input} !mb-0`;
+
+  const handleContactError = (error) => {
+    if (isContactError(error)) {
+      window.appAlert(error.message);
+      return true;
+    }
+    return false;
+  };
+
+  const createSocialUserProfile = async (user, providerLabel) => {
+    const normalizedEmail = normalizeEmail(user.email);
+    const normalizedPhone = normalizePhoneNumber(user.phoneNumber);
+
+    if (!normalizedEmail) {
+      window.appAlert(`การเข้าสู่ระบบด้วย ${providerLabel} ไม่สำเร็จ: บัญชีนี้ไม่มีอีเมลให้ระบบตรวจสอบ กรุณาสมัครด้วยอีเมลและรหัสผ่าน`);
+      await auth.signOut();
+      return;
+    }
+
+    await saveUserProfileWithContactRegistry(db, user.uid, {
+      User_ID: user.uid,
+      Email: normalizedEmail,
+      FullName: user.displayName || '',
+      PhoneNumber: normalizedPhone,
+      Role: 'customer',
+      Points_Balance: 0,
+      Is_Active: true,
+      CreatedAt: new Date()
+    });
+  };
 
   const signInExistingAccount = async () => {
     const userCred = await signInWithEmailAndPassword(auth, email, password);
@@ -85,43 +119,59 @@ function Auth() {
         window.appAlert("สมัครสมาชิกไม่สำเร็จ เพราะรหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร");
         return;
       }
-      const duplicateEmailUser = await findUserByEmail(db, normalizedEmail);
-      if (duplicateEmailUser) {
-        window.appAlert(getDuplicateEmailMessage(normalizedEmail));
-        return;
-      }
       const existingSignInMethods = await fetchSignInMethodsForEmail(auth, normalizedEmail);
       if (existingSignInMethods.length > 0) {
         window.appAlert(getDuplicateEmailMessage(normalizedEmail));
         return;
       }
-      const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone);
-      if (duplicatePhoneUser) {
-        window.appAlert(getDuplicatePhoneMessage(normalizedPhone));
-        return;
-      }
+      await assertEmailAvailableForSignup(db, normalizedEmail);
+      await assertPhoneAvailableForSignup(db, normalizedPhone);
       if (!allowWeakPassword && !getPasswordStrength(password).isAcceptable) {
         setWeakPasswordConfirmOpen(true);
         return;
       }
 
       const userCred = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
-
-      await sendEmailVerification(userCred.user, getEmailActionCodeSettings());
-
-      await setDoc(doc(db, "users", userCred.user.uid), {
+      const userProfile = {
         User_ID: userCred.user.uid,
         Email: normalizedEmail,
-        FullName: fullName,
+        FullName: fullName.trim(),
         PhoneNumber: normalizedPhone,
         Role: 'customer',
         Points_Balance: 0,
         Is_Active: true,
         CreatedAt: new Date()
-      });
+      };
+
+      try {
+        await saveUserProfileWithContactRegistry(db, userCred.user.uid, userProfile, { merge: false });
+      } catch (profileError) {
+        try {
+          await deleteUser(userCred.user);
+        } catch (deleteError) {
+          // The visible registration error is more useful than a cleanup failure here.
+        }
+
+        if (handleContactError(profileError)) {
+          return;
+        }
+
+        throw profileError;
+      }
+
+      try {
+        await sendEmailVerification(userCred.user, getEmailActionCodeSettings());
+        window.appAlert("สมัครสมาชิกสำเร็จ ระบบได้ส่งลิงก์ยืนยันไปที่อีเมลแล้ว กรุณาตรวจสอบกล่องข้อความและกดยืนยันก่อนเข้าใช้งาน");
+      } catch (verificationError) {
+        window.appAlert("สมัครสมาชิกสำเร็จแล้ว แต่ยังส่งอีเมลยืนยันไม่ได้ กรุณากดส่งอีเมลยืนยันอีกครั้งในหน้าถัดไป");
+      }
 
       setMode('login');
     } catch (err) {
+      if (handleContactError(err)) {
+        return;
+      }
+
       window.appAlert(`สมัครสมาชิกไม่สำเร็จ: ${getFirebaseAuthErrorMessage(err, 'กรุณาตรวจสอบข้อมูลแล้วลองอีกครั้ง')}`);
     } finally {
       setLoading(false);
@@ -155,16 +205,7 @@ function Auth() {
       const user = result.user;
       const userDoc = await getDoc(doc(db, "users", user.uid));
       if (!userDoc.exists()) {
-        await setDoc(doc(db, "users", user.uid), {
-          User_ID: user.uid,
-          Email: user.email,
-          FullName: user.displayName || '',
-          PhoneNumber: user.phoneNumber || '',
-          Role: 'customer',
-          Points_Balance: 0,
-          Is_Active: true,
-          CreatedAt: new Date()
-        });
+        await createSocialUserProfile(user, 'Google');
       } else {
         const userData = userDoc.data();
         const isActive = userData.Is_Active ?? userData.isActive ?? true;
@@ -174,6 +215,11 @@ function Auth() {
         }
       }
     } catch (err) {
+      if (handleContactError(err)) {
+        await auth.signOut();
+        setLoading(false);
+        return;
+      }
       window.appAlert(`การเข้าสู่ระบบด้วย Google ไม่สำเร็จ: ${getFirebaseAuthErrorMessage(err, 'กรุณาลองเข้าสู่ระบบด้วย Google อีกครั้ง')}`);
     } finally {
       setLoading(false);
@@ -190,16 +236,7 @@ function Auth() {
       const userDoc = await getDoc(doc(db, "users", user.uid));
       
       if (!userDoc.exists()) {
-        await setDoc(doc(db, "users", user.uid), {
-          User_ID: user.uid,
-          Email: user.email || '', // บางบัญชี Facebook อาจไม่ผูกอีเมลระบบจะส่งค่าว่างป้องกันข้อผิดพลาด
-          FullName: user.displayName || '',
-          PhoneNumber: user.phoneNumber || '',
-          Role: 'customer',
-          Points_Balance: 0,
-          Is_Active: true,
-          CreatedAt: new Date()
-        });
+        await createSocialUserProfile(user, 'Facebook');
       } else {
         const userData = userDoc.data();
         const isActive = userData.Is_Active ?? userData.isActive ?? true;
@@ -209,6 +246,11 @@ function Auth() {
         }
       }
     } catch (err) {
+      if (handleContactError(err)) {
+        await auth.signOut();
+        setLoading(false);
+        return;
+      }
       window.appAlert(`การเข้าสู่ระบบด้วย Facebook ไม่สำเร็จ: ${getFirebaseAuthErrorMessage(err, 'กรุณาลองเข้าสู่ระบบด้วย Facebook อีกครั้ง')}`);
     } finally {
       setLoading(false);

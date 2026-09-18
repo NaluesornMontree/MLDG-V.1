@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { db, secondaryAuth } from '../firebase'; 
-import { collection, getDocs, doc, updateDoc, setDoc } from "firebase/firestore";
-import { createUserWithEmailAndPassword, fetchSignInMethodsForEmail, signOut } from "firebase/auth";
+import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
+import { createUserWithEmailAndPassword, deleteUser, fetchSignInMethodsForEmail, signOut } from "firebase/auth";
 import { theme } from '../styles/theme';
 import Popup from './Popup';
 import {
   findUserByEmail,
-  findUserByPhoneNumber,
   getDuplicateEmailMessage,
-  getDuplicatePhoneMessage,
   normalizeEmail,
   normalizePhoneNumber
 } from '../utils/userPhoneUtils';
+import {
+  assertEmailAvailableForSignup,
+  assertPhoneAvailableForSignup,
+  isContactError,
+  saveUserProfileWithContactRegistry
+} from '../utils/contactRegistryUtils';
 import PasswordStrengthMeter, { getPasswordStrength } from './PasswordStrengthMeter';
 import { getFirebaseAuthErrorMessage } from '../utils/firebaseErrorMessages';
 import PasswordInput from './PasswordInput';
@@ -94,11 +98,8 @@ function StaffManagement() {
         return;
       }
 
-      const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone);
-      if (duplicatePhoneUser) {
-        window.appAlert(getDuplicatePhoneMessage(normalizedPhone));
-        return;
-      }
+      await assertEmailAvailableForSignup(db, normalizedEmail);
+      await assertPhoneAvailableForSignup(db, normalizedPhone);
 
       if (!allowWeakPassword && !getPasswordStrength(newStaff.Password).isAcceptable) {
         setWeakPasswordConfirmOpen(true);
@@ -112,15 +113,25 @@ function StaffManagement() {
       );
       const user = userCredential.user;
 
-      await setDoc(doc(db, "users", user.uid), {
-        User_ID: user.uid,
-        FullName: newStaff.FullName,
-        Email: normalizedEmail,
-        PhoneNumber: normalizedPhone,
-        Role: newStaff.Role, // บันทึก Role ตามที่เลือก
-        Is_Active: true,
-        CreatedAt: new Date()
-      });
+      try {
+        await saveUserProfileWithContactRegistry(db, user.uid, {
+          User_ID: user.uid,
+          FullName: newStaff.FullName,
+          Email: normalizedEmail,
+          PhoneNumber: normalizedPhone,
+          Role: newStaff.Role, // บันทึก Role ตามที่เลือก
+          Is_Active: true,
+          CreatedAt: new Date()
+        }, { merge: false });
+      } catch (profileError) {
+        try {
+          await deleteUser(user);
+        } catch (deleteError) {
+          // Show the useful profile error instead of a cleanup error.
+        }
+
+        throw profileError;
+      }
 
       await signOut(secondaryAuth);
 
@@ -129,6 +140,10 @@ function StaffManagement() {
       fetchStaff();
       window.appAlert("เพิ่มสมาชิกในทีมและสร้างบัญชีเข้าใช้งานเรียบร้อยแล้ว");
     } catch (err) {
+      if (isContactError(err)) {
+        window.appAlert(err.message);
+        return;
+      }
       window.appAlert(`สร้างบัญชีไม่สำเร็จ: ${getFirebaseAuthErrorMessage(err, 'กรุณาตรวจสอบข้อมูลแล้วลองอีกครั้ง')}`);
     }
   };
@@ -153,14 +168,7 @@ function StaffManagement() {
         return;
       }
 
-      const duplicatePhoneUser = await findUserByPhoneNumber(db, normalizedPhone, editingId);
-      if (duplicatePhoneUser) {
-        window.appAlert(getDuplicatePhoneMessage(normalizedPhone));
-        return;
-      }
-
-      const staffRef = doc(db, "users", editingId);
-      await updateDoc(staffRef, { 
+      await saveUserProfileWithContactRegistry(db, editingId, {
         FullName: editData.FullName,
         Email: normalizedEmail,
         PhoneNumber: normalizedPhone,
@@ -172,6 +180,10 @@ function StaffManagement() {
       window.appAlert("แก้ไขข้อมูลสมาชิกในทีมสำเร็จ");
     } catch (error) {
       console.error("Error updating team member:", error);
+      if (isContactError(error)) {
+        window.appAlert(error.message);
+        return;
+      }
       window.appAlert("ไม่สามารถอัปเดตข้อมูลได้");
     }
   };
