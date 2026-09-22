@@ -13,7 +13,7 @@ import {
     getClubType,
     sortGolfClubsLikeInventory
 } from '../utils/golfClubUtils';
-import { areSelectedSlotsContiguous, isSelectedSlotsDraftValid } from '../utils/bookingTimeUtils';
+import { areSelectedSlotsContiguous } from '../utils/bookingTimeUtils';
 import { toWholeNumber } from '../utils/numberUtils';
 import useClubRentalRate from '../utils/useClubRentalRate';
 
@@ -137,7 +137,7 @@ const BookingFlow = ({ user, userData }) => {
 
     const proceedToCustomerDetails = () => {
         if (!areSelectedSlotsContiguous(selectedSlots, TIME_SLOTS)) {
-            showAlert('กรุณาเลือกเวลาแต่ละเลนให้ต่อเนื่อง และเริ่มต้นเวลาเดียวกัน โดยสามารถเลือกเวลาเลิกต่างกันได้', 'warning');
+            showAlert('กรุณาเลือกช่วงเวลาให้เหมือนกันทุกเลน และแต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง', 'warning');
             return;
         }
 
@@ -360,19 +360,11 @@ const BookingFlow = ({ user, userData }) => {
                     return copy;
                 }
                 const nextSelectedSlots = { ...prevSelectedSlots, [laneKey]: updated };
-                if (!isSelectedSlotsDraftValid(nextSelectedSlots, TIME_SLOTS)) {
-                    showAlert('แต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง และต้องเริ่มเวลาเดียวกัน สามารถเลือกเวลาเลิกต่างกันได้', 'warning');
-                    return prevSelectedSlots;
-                }
                 return nextSelectedSlots;
             }
 
             if (shouldSelect && !currentLaneSlots.includes(slot)) {
                 const nextSelectedSlots = { ...prevSelectedSlots, [laneKey]: [...currentLaneSlots, slot] };
-                if (!isSelectedSlotsDraftValid(nextSelectedSlots, TIME_SLOTS)) {
-                    showAlert('แต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง และต้องเริ่มเวลาเดียวกัน สามารถเลือกเวลาเลิกต่างกันได้', 'warning');
-                    return prevSelectedSlots;
-                }
                 return nextSelectedSlots;
             }
 
@@ -488,7 +480,7 @@ const BookingFlow = ({ user, userData }) => {
             }
 
             if (!areSelectedSlotsContiguous(selectedSlots, TIME_SLOTS)) {
-                showAlert('แต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง และต้องเริ่มเวลาเดียวกัน สามารถเลือกเวลาเลิกต่างกันได้', 'warning');
+                showAlert('ทุกเลนในรายการเดียวกันต้องเลือกช่วงเวลาเดียวกัน และแต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง', 'warning');
                 return;
             }
 

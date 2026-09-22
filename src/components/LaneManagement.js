@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase'; 
-import { collection, getDocs, setDoc, doc, updateDoc, query, where, Timestamp, deleteDoc, addDoc, onSnapshot } from "firebase/firestore"; 
+import { collection, getDoc, getDocs, setDoc, doc, updateDoc, query, where, Timestamp, deleteDoc, addDoc, onSnapshot } from "firebase/firestore"; 
 import Popup from './Popup'; 
 import BookingDetailModal from './BookingDetailModal'; 
 import { CheckIcon, GolfIcon, UserIcon, WrenchIcon } from './AppIcons';
@@ -14,7 +14,7 @@ import {
   getClubType,
   sortGolfClubsLikeInventory
 } from '../utils/golfClubUtils';
-import { areSelectedSlotsContiguous, isSelectedSlotsDraftValid } from '../utils/bookingTimeUtils';
+import { areSelectedSlotsContiguous } from '../utils/bookingTimeUtils';
 import { toWholeNumber } from '../utils/numberUtils';
 import useClubRentalRate from '../utils/useClubRentalRate';
 
@@ -74,12 +74,13 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
   const isPhoneBookingMode = laneActionMode === 'phone-booking';
   const getBookingDateValue = (booking) => booking?.bookingDate || booking?.Booking_Date || selectedDate;
   const isBookingCheckInAllowed = (booking) => getBookingDateValue(booking) === getLocalDateValue();
+  const normalizedWalkInPhoneForLookup = String(walkInPhone || '').replace(/\D/g, '');
   const walkInMemberStatusMessage = walkInLookupLoading
     ? 'กำลังตรวจสอบสมาชิก...'
     : walkInMemberInfo
-      ? 'พบสมาชิกในระบบแล้ว ระบบจะเปิดใช้งานเลนให้ทันทีและเติมชื่อกับเบอร์ให้เรียบร้อย'
-      : walkInEmail.trim()
-        ? 'ไม่พบอีเมลนี้ในระบบ สามารถกรอกชื่อและเบอร์สำหรับจองให้คนอื่นได้'
+      ? 'พบสมาชิกในระบบแล้ว ระบบเติมข้อมูลลูกค้าให้เรียบร้อย'
+      : walkInEmail.trim() || normalizedWalkInPhoneForLookup.length === 10
+        ? 'ไม่พบสมาชิกจากข้อมูลนี้ สามารถกรอกชื่อและเบอร์สำหรับจองให้ลูกค้าทั่วไปได้'
         : '';
 
   const TIME_SLOTS = [
@@ -438,6 +439,69 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
     setWalkInLookupLoading(false);
   };
 
+  const findMemberByPhone = async (phoneNumber) => {
+    const normalizedPhone = String(phoneNumber || '').replace(/\D/g, '');
+    if (normalizedPhone.length !== 10) {
+      if (!walkInEmail.trim()) {
+        setWalkInMemberInfo(null);
+      }
+      setWalkInLookupLoading(false);
+      return;
+    }
+
+    setWalkInLookupLoading(true);
+    try {
+      let memberDoc = null;
+      const registrySnap = await getDoc(doc(db, "phone_registry", normalizedPhone)).catch(() => null);
+      const registryUserId = registrySnap?.exists?.() ? registrySnap.data()?.User_ID : '';
+
+      if (registryUserId) {
+        const userSnap = await getDoc(doc(db, "users", registryUserId));
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          memberDoc = {
+            id: userSnap.id,
+            email: data.Email || data.email || '',
+            fullName: data.FullName || data.fullName || data.displayName || '',
+            phoneNumber: data.PhoneNumber || data.phone || normalizedPhone
+          };
+        }
+      }
+
+      if (!memberDoc) {
+        const phoneFields = ["PhoneNumber", "phoneNumber", "phone"];
+        for (const fieldName of phoneFields) {
+          const phoneQuery = query(collection(db, "users"), where(fieldName, "==", normalizedPhone));
+          const snap = await getDocs(phoneQuery);
+          if (!snap.empty) {
+            const docSnap = snap.docs[0];
+            const data = docSnap.data();
+            memberDoc = {
+              id: docSnap.id,
+              email: data.Email || data.email || '',
+              fullName: data.FullName || data.fullName || data.displayName || '',
+              phoneNumber: data.PhoneNumber || data.phone || normalizedPhone
+            };
+            break;
+          }
+        }
+      }
+
+      if (memberDoc) {
+        setWalkInMemberInfo(memberDoc);
+        setWalkInName(memberDoc.fullName || '');
+        setWalkInEmail(memberDoc.email || '');
+        setWalkInPhone(String(memberDoc.phoneNumber || normalizedPhone).replace(/\D/g, '').slice(0, 10));
+      } else {
+        setWalkInMemberInfo(null);
+      }
+    } catch (error) {
+      console.error("Error finding member by phone:", error);
+      setWalkInMemberInfo(null);
+    }
+    setWalkInLookupLoading(false);
+  };
+
   const handleCellClick = (laneNum, slot) => {
     if (publicView) {
       const cellInfo = getCellStatus(laneNum, slot);
@@ -506,31 +570,11 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
           return copy;
         }
         const nextSelectedSlots = { ...prevSelectedSlots, [laneKey]: updated };
-        if (!isSelectedSlotsDraftValid(nextSelectedSlots, TIME_SLOTS)) {
-          setAlertPopup({
-            isOpen: true,
-            type: 'warning',
-            title: 'เวลาไม่ต่อเนื่อง',
-            message: 'แต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง และต้องเริ่มเวลาเดียวกัน สามารถเลือกเวลาเลิกต่างกันได้',
-            onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
-          });
-          return prevSelectedSlots;
-        }
         return nextSelectedSlots;
       }
 
       if (shouldSelect && !currentLaneSlots.includes(slot)) {
         const nextSelectedSlots = { ...prevSelectedSlots, [laneKey]: [...currentLaneSlots, slot] };
-        if (!isSelectedSlotsDraftValid(nextSelectedSlots, TIME_SLOTS)) {
-          setAlertPopup({
-            isOpen: true,
-            type: 'warning',
-            title: 'เลือกข้ามเลนข้ามเวลาไม่ได้',
-            message: 'แต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง และต้องเริ่มเวลาเดียวกัน สามารถเลือกเวลาเลิกต่างกันได้',
-            onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
-          });
-          return prevSelectedSlots;
-        }
         return nextSelectedSlots;
       }
 
@@ -577,7 +621,7 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
         isOpen: true,
         type: 'warning',
         title: 'เลือกเวลาไม่ครบทุกเลน',
-        message: 'กรุณาเลือกเวลาแต่ละเลนให้ต่อเนื่อง และเริ่มต้นเวลาเดียวกัน โดยสามารถเลือกเวลาเลิกต่างกันได้',
+        message: 'กรุณาเลือกช่วงเวลาให้เหมือนกันทุกเลน และแต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง',
         onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
       });
       return;
@@ -790,7 +834,7 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
           isOpen: true,
           type: 'warning',
           title: 'เลือกข้ามเลนข้ามเวลาไม่ได้',
-          message: 'แต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง และต้องเริ่มเวลาเดียวกัน สามารถเลือกเวลาเลิกต่างกันได้',
+          message: 'ทุกเลนในรายการเดียวกันต้องเลือกช่วงเวลาเดียวกัน และแต่ละเลนต้องเลือกเวลาแบบต่อเนื่อง',
           onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
         });
         return;
@@ -1480,7 +1524,21 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
                   maxLength={10}
                   inputMode="numeric"
                   pattern="[0-9]{10}"
-                  onChange={(e) => setWalkInPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  onChange={(e) => {
+                    const nextPhone = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    if (walkInMemberInfo) {
+                      setWalkInName('');
+                      setWalkInEmail('');
+                    }
+                    setWalkInPhone(nextPhone);
+                    setWalkInMemberInfo(null);
+                    if (nextPhone.length === 10) {
+                      findMemberByPhone(nextPhone);
+                    } else {
+                      setWalkInLookupLoading(false);
+                    }
+                  }}
+                  onBlur={(e) => findMemberByPhone(e.target.value)}
                   placeholder={isPhoneBookingMode ? 'กรอกเบอร์โทรศัพท์ 10 หลัก...' : 'กรอกเบอร์โทรศัพท์ (ถ้ามี)...'}
                   className="w-full bg-slate-100 p-3 rounded-xl text-sm font-bold focus:outline-none"
                 />

@@ -162,10 +162,12 @@ function PublicPortal({ onLoginRequest }) {
   ];
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f0fdf4_0%,#f8fafc_42%,#ecfdf5_100%)] font-sans text-slate-800">
-      <main>
-        <section className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:py-10">
-          <div className="relative overflow-hidden rounded-[1.5rem] border border-slate-200 bg-emerald-950 shadow-xl sm:rounded-[2rem]">
+    <div className="relative min-h-screen overflow-hidden bg-[#f3faf6] font-sans text-slate-800">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.18),transparent_32%),radial-gradient(circle_at_top_right,rgba(234,179,8,0.12),transparent_28%),linear-gradient(180deg,#ecfdf5_0%,#f8fafc_44%,#eefcf4_100%)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-emerald-900/10 to-transparent" />
+      <main className="relative z-10">
+        <section className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:py-8">
+          <div className="relative overflow-hidden rounded-[1.5rem] border border-emerald-100 bg-emerald-950 shadow-xl shadow-emerald-950/15 sm:rounded-[2rem]">
             {heroSlides.map((slide, index) => (
               <img
                 key={slide.src}
@@ -182,69 +184,73 @@ function PublicPortal({ onLoginRequest }) {
               />
             ))}
 
-            <div className="relative h-[410px] sm:h-[720px] lg:h-[800px]">
-              <div className="absolute inset-0 bg-gradient-to-b from-emerald-950/95 via-emerald-950/50 to-transparent" />
-              <div className="absolute inset-x-0 top-0 z-10 flex flex-col items-start px-5 pt-4 sm:px-8 sm:pt-6 lg:px-12 lg:pt-8">
-                <div className="order-2 mt-3 flex w-full flex-col gap-2 sm:mt-5 sm:gap-3">
-                  <div className="grid w-full max-w-3xl grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
-                    {[
-                      ['15', 'เลนซ้อม'],
-                      ['08:00-19:00', 'เวลาให้บริการ'],
-                      ['Online', 'จองล่วงหน้า']
-                    ].map(([value, label], index) => (
-                      <div key={label} className={`${index === 2 ? 'hidden sm:block' : ''} rounded-2xl border border-white/20 bg-white/15 p-3 shadow-sm backdrop-blur sm:rounded-3xl sm:p-4`}>
-                        <div className="text-base font-black text-white sm:text-xl">{value}</div>
-                        <div className="mt-0.5 text-[11px] font-bold text-emerald-50/85 sm:mt-1">{label}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="hidden flex-col gap-3 sm:flex sm:flex-row">
-                    <button
-                      type="button"
-                      onClick={onLoginRequest}
-                      className="rounded-2xl border border-white/20 bg-white/15 px-6 py-3 text-sm font-black text-white shadow-sm backdrop-blur transition-all hover:bg-white/25"
-                    >
-                      จองเลนซ้อมออนไลน์
-                    </button>
-                    <a
-                      href="#public-info"
-                      onClick={handleScrollToPublicInfo}
-                      className="rounded-2xl border border-white/20 bg-white/15 px-6 py-3 text-center text-sm font-black text-white shadow-sm backdrop-blur transition-all hover:bg-white/25"
-                    >
-                      ตรวจสอบตารางเลน
-                    </a>
-                    <a
-                      href="#public-reviews"
-                      onClick={handleScrollToPublicReviews}
-                      className="rounded-2xl border border-white/20 bg-white/15 px-6 py-3 text-center text-sm font-black text-white shadow-sm backdrop-blur transition-all hover:bg-white/25"
-                    >
-                      ตรวจสอบคะแนนร้าน
-                    </a>
-                  </div>
-                </div>
-
-                <div className="order-1 w-full">
-                  <div className="mb-3 flex w-full flex-col items-start justify-between gap-2 sm:gap-3 sm:flex-row sm:items-center">
+            <div className="relative min-h-[560px] sm:min-h-[620px] lg:min-h-[660px]">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/92 via-emerald-950/58 to-emerald-900/18" />
+              <div className="absolute inset-x-0 top-0 h-2/3 bg-gradient-to-b from-emerald-950/70 via-emerald-950/22 to-transparent" />
+              <div className="absolute inset-y-0 left-0 w-3/4 bg-gradient-to-r from-emerald-950/58 via-emerald-950/18 to-transparent" />
+              <div className="absolute inset-x-0 top-0 z-10 flex min-h-full flex-col justify-between px-5 py-5 sm:px-8 sm:py-7 lg:px-12 lg:py-10">
+                <div className="w-full">
+                  <div className="mb-8 flex w-full flex-col items-start justify-between gap-3 sm:mb-10 sm:flex-row sm:items-center">
                     <div className="inline-flex w-fit rounded-2xl border border-white/20 bg-white/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-50 backdrop-blur sm:px-4 sm:py-2 sm:text-[11px]">
                       Driving Range & Golf Practice
                     </div>
                     <button
                       type="button"
                       onClick={onLoginRequest}
-                      className="inline-flex w-fit rounded-2xl border border-white/20 bg-white/15 px-3 py-1.5 text-[11px] font-black text-white shadow-sm backdrop-blur transition-all hover:bg-white/25 sm:px-5 sm:py-2 sm:text-xs"
+                      className="inline-flex w-fit rounded-2xl border border-white/20 bg-white/15 px-4 py-2 text-xs font-black text-white shadow-sm backdrop-blur transition-all hover:bg-white/25 sm:px-5"
                     >
                       เข้าสู่ระบบ / สมัครสมาชิก
                     </button>
                   </div>
-                  <h2 className="max-w-4xl font-black leading-tight text-white drop-shadow-sm">
-                    <span className="block text-2xl sm:text-5xl lg:text-6xl">เมืองเลยไดร์ฟกอล์ฟ</span>
-                    <span className="mt-1 block text-lg sm:mt-2 sm:text-3xl lg:text-4xl">สนามสำหรับฝึกซ้อมกีฬากอล์ฟ</span>
-                    <span className="block text-lg sm:text-3xl lg:text-4xl">พร้อมระบบจองเลนซ้อมออนไลน์</span>
-                  </h2>
-                  <p className="mt-2 max-w-2xl text-xs font-bold leading-6 text-emerald-50/90 sm:mt-3 sm:text-base sm:leading-7">
-                    ตรวจสอบสถานะเลนซ้อมได้ก่อนเดินทาง ดูคะแนนและความคิดเห็นจากลูกค้า และเข้าสู่ระบบสมาชิกเพื่อจองวันเวลาใช้งานได้สะดวกยิ่งขึ้น
-                  </p>
+
+                  <div className="max-w-4xl">
+                    <h2 className="font-black leading-tight text-white drop-shadow-sm">
+                      <span className="block text-3xl sm:text-5xl lg:text-6xl">เมืองเลยไดร์ฟกอล์ฟ</span>
+                      <span className="mt-2 block text-xl sm:text-3xl lg:text-4xl">สนามฝึกซ้อมกอล์ฟ พร้อมระบบจองเลนออนไลน์</span>
+                    </h2>
+                    <p className="mt-4 max-w-2xl text-sm font-bold leading-7 text-emerald-50/90 sm:text-base">
+                      ตรวจสอบสถานะเลนซ้อมก่อนเดินทาง ดูคะแนนจากลูกค้า และเข้าสู่ระบบสมาชิกเพื่อจองเวลาใช้งานได้สะดวกยิ่งขึ้น
+                    </p>
+                  </div>
+
+                  <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={onLoginRequest}
+                      className="rounded-2xl border border-white/25 bg-white/15 px-6 py-3 text-center text-sm font-black text-white shadow-sm backdrop-blur transition-all hover:bg-white/25"
+                    >
+                      จองเลนซ้อมออนไลน์
+                    </button>
+                    <a
+                      href="#public-info"
+                      onClick={handleScrollToPublicInfo}
+                      className="rounded-2xl border border-white/25 bg-white/15 px-6 py-3 text-center text-sm font-black text-white shadow-sm backdrop-blur transition-all hover:bg-white/25"
+                    >
+                      ตรวจสอบตารางเลน
+                    </a>
+                    <a
+                      href="#public-reviews"
+                      onClick={handleScrollToPublicReviews}
+                      className="rounded-2xl border border-white/25 bg-white/15 px-6 py-3 text-center text-sm font-black text-white shadow-sm backdrop-blur transition-all hover:bg-white/25"
+                    >
+                      ตรวจสอบคะแนนร้าน
+                    </a>
+                  </div>
+                </div>
+
+                <div className="mt-8 flex w-full flex-col gap-3">
+                  <div className="grid w-full max-w-3xl grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+                    {[
+                      ['15', 'เลนซ้อม'],
+                      ['08:00-19:00', 'เวลาให้บริการ'],
+                      ['Online', 'จองล่วงหน้า']
+                    ].map(([value, label], index) => (
+                      <div key={label} className={`${index === 2 ? 'col-span-2 sm:col-span-1' : ''} rounded-2xl border border-white/20 bg-white/15 p-3 shadow-sm backdrop-blur sm:rounded-3xl sm:p-4`}>
+                        <div className="text-base font-black text-white sm:text-xl">{value}</div>
+                        <div className="mt-0.5 text-[11px] font-bold text-emerald-50/85 sm:mt-1">{label}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -262,16 +268,20 @@ function PublicPortal({ onLoginRequest }) {
           </div>
         </section>
 
-        <section className="mx-auto max-w-7xl px-4 pb-5 sm:px-6 sm:pb-6">
+        <section className="mx-auto max-w-7xl px-4 pb-6 sm:px-6">
+          <div className="mb-4 flex flex-col gap-1 sm:mb-5">
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">What You Can Do</p>
+            <h2 className="text-xl font-black text-slate-900 sm:text-2xl">ใช้งานง่าย เห็นสถานะการจองชัดเจน</h2>
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3">
             {publicFeatureCards.map(([title, description, badge]) => (
-              <div key={title} className="relative overflow-hidden rounded-3xl border border-emerald-200 bg-emerald-50/80 p-4 shadow-sm sm:p-5">
+              <div key={title} className="relative overflow-hidden rounded-3xl border border-emerald-200 bg-white/85 p-4 shadow-sm shadow-emerald-950/5 sm:p-5">
                 <div className="absolute inset-y-4 left-0 w-1.5 rounded-r-full bg-emerald-500" />
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-100 bg-white text-emerald-700 shadow-sm sm:h-11 sm:w-11">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-700 shadow-sm sm:h-11 sm:w-11">
                     <span className="h-3 w-3 rounded-full bg-emerald-600" />
                   </div>
-                  <span className="rounded-full border border-emerald-100 bg-white px-3 py-1 text-[11px] font-black text-emerald-700">
+                  <span className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-700">
                     {badge}
                   </span>
                 </div>
@@ -283,8 +293,33 @@ function PublicPortal({ onLoginRequest }) {
         </section>
 
         <section id="public-info" className="mx-auto max-w-7xl px-4 pb-10 sm:px-6">
+          <div className="mb-4 rounded-3xl border border-emerald-100 bg-white/85 p-4 shadow-sm shadow-emerald-950/5 sm:p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Lane Schedule</p>
+                <h2 className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">ตารางการใช้เลนซ้อม</h2>
+                <p className="mt-1.5 text-sm font-bold leading-6 text-slate-500">
+                  ตรวจสอบสถานะเลนซ้อมก่อนเดินทาง หากต้องการจองให้เข้าสู่ระบบสมาชิก
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onLoginRequest}
+                className="w-full rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-sm transition-all hover:bg-emerald-700 lg:w-auto"
+              >
+                เข้าสู่ระบบเพื่อจอง
+              </button>
+            </div>
+          </div>
           <LaneManagement publicView onLoginRequest={onLoginRequest} />
           <div id="public-reviews" className="mt-6 scroll-mt-6">
+            <div className="mb-4 rounded-3xl border border-emerald-100 bg-white/85 p-4 shadow-sm shadow-emerald-950/5 sm:p-5">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Customer Reviews</p>
+              <h2 className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">คะแนนและความคิดเห็นของร้าน</h2>
+              <p className="mt-1.5 text-sm font-bold leading-6 text-slate-500">
+                ดูความคิดเห็นจากลูกค้าที่เคยใช้บริการ เพื่อช่วยตัดสินใจก่อนเข้าใช้สนามซ้อม
+              </p>
+            </div>
             <ReviewManagement publicView />
           </div>
         </section>

@@ -45,14 +45,7 @@ export const isSelectedSlotsDraftValid = (selectedSlots = {}, timeSlotsOrder = [
   const everyLaneContiguous = selectedSlotGroups.every((slots) => areSlotsContiguous(slots, timeSlotsOrder));
   if (!everyLaneContiguous) return false;
 
-  const firstSelectedIndex = Math.min(
-    ...selectedSlotGroups
-      .flat()
-      .map((slot) => timeSlotsOrder.indexOf(slot))
-      .filter((index) => index >= 0)
-  );
-
-  return selectedSlotGroups.every((slots) => timeSlotsOrder.indexOf(slots[0]) === firstSelectedIndex);
+  return doSelectedLanesShareSameSlots(selectedSlots, timeSlotsOrder);
 };
 
 export const areSelectedSlotsContiguous = (selectedSlots = {}, timeSlotsOrder = []) => {
