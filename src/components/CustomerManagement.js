@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { theme } from '../styles/theme';
 import Popup from './Popup';
 import IntegerStepperInput from './IntegerStepperInput';
 import { normalizePhoneNumber } from '../utils/userPhoneUtils';
-import { isContactError, saveUserProfileWithContactRegistry } from '../utils/contactRegistryUtils';
+import {
+  deleteUserProfileWithContactRegistry,
+  isContactError,
+  saveUserProfileWithContactRegistry
+} from '../utils/contactRegistryUtils';
 import { toWholeNumber } from '../utils/numberUtils';
 
 function CustomerManagement() {
@@ -180,7 +184,7 @@ function CustomerManagement() {
       message: 'ยืนยันการลบข้อมูลลูกค้าแบบถาวร?',
       onConfirm: async () => {
         try {
-          await deleteDoc(doc(db, 'users', id));
+          await deleteUserProfileWithContactRegistry(db, id);
           setAlertPopup({
             isOpen: true,
             type: 'info',

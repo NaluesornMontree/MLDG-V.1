@@ -147,8 +147,22 @@ function PublicPortal({ onLoginRequest }) {
     });
   };
 
+  const handleScrollToPublicReviews = (event) => {
+    event.preventDefault();
+    document.getElementById('public-reviews')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'
+    });
+  };
+
+  const publicFeatureCards = [
+    ['ตรวจสอบเลนก่อนมาใช้บริการ', 'ดูสถานะเลนซ้อมแบบอัปเดตตามระบบ ช่วยวางแผนวันและเวลาฝึกซ้อมได้ง่ายขึ้น', 'พร้อมใช้งาน'],
+    ['จองออนไลน์สำหรับสมาชิก', 'สมาชิกสามารถเลือกวัน เวลา เลนซ้อม จำนวนผู้เข้าใช้ และบริการเสริมได้จากหน้าเว็บ', 'สำหรับสมาชิก'],
+    ['รีวิวและคะแนนจากลูกค้า', 'ตรวจสอบประสบการณ์จากผู้ใช้บริการจริงก่อนตัดสินใจเข้าใช้สนามซ้อม', 'ข้อมูลจริง']
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f0fdf4_0%,#f8fafc_42%,#ecfdf5_100%)] font-sans text-slate-800">
       <main>
         <section className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:py-10">
           <div className="relative overflow-hidden rounded-[1.5rem] border border-slate-200 bg-emerald-950 shadow-xl sm:rounded-[2rem]">
@@ -200,6 +214,13 @@ function PublicPortal({ onLoginRequest }) {
                     >
                       ตรวจสอบตารางเลน
                     </a>
+                    <a
+                      href="#public-reviews"
+                      onClick={handleScrollToPublicReviews}
+                      className="rounded-2xl border border-white/20 bg-white/15 px-6 py-3 text-center text-sm font-black text-white shadow-sm backdrop-blur transition-all hover:bg-white/25"
+                    >
+                      ตรวจสอบคะแนนร้าน
+                    </a>
                   </div>
                 </div>
 
@@ -243,26 +264,19 @@ function PublicPortal({ onLoginRequest }) {
 
         <section className="mx-auto max-w-7xl px-4 pb-5 sm:px-6 sm:pb-6">
           <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3">
-            {[
-              ['ตรวจสอบเลนก่อนมาใช้บริการ', 'ดูสถานะเลนซ้อมแบบอัปเดตตามระบบ ช่วยวางแผนวันและเวลาฝึกซ้อมได้ง่ายขึ้น'],
-              ['จองออนไลน์สำหรับสมาชิก', 'สมาชิกสามารถเลือกวัน เวลา เลนซ้อม จำนวนผู้เข้าใช้ และบริการเสริมได้จากหน้าเว็บ'],
-              ['รีวิวและคะแนนจากลูกค้า', 'ตรวจสอบประสบการณ์จากผู้ใช้บริการจริงก่อนตัดสินใจเข้าใช้สนามซ้อม']
-            ].map(([title, description]) => (
-              <div key={title} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-700 sm:mb-4 sm:h-11 sm:w-11">
-                  <span className="h-3 w-3 rounded-full bg-emerald-600" />
+            {publicFeatureCards.map(([title, description, badge]) => (
+              <div key={title} className="relative overflow-hidden rounded-3xl border border-emerald-200 bg-emerald-50/80 p-4 shadow-sm sm:p-5">
+                <div className="absolute inset-y-4 left-0 w-1.5 rounded-r-full bg-emerald-500" />
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-100 bg-white text-emerald-700 shadow-sm sm:h-11 sm:w-11">
+                    <span className="h-3 w-3 rounded-full bg-emerald-600" />
+                  </div>
+                  <span className="rounded-full border border-emerald-100 bg-white px-3 py-1 text-[11px] font-black text-emerald-700">
+                    {badge}
+                  </span>
                 </div>
-                <h3 className="text-base font-black text-slate-900">{title}</h3>
+                <h3 className="mt-4 text-base font-black text-slate-900">{title}</h3>
                 <p className="mt-1.5 text-sm font-bold leading-6 text-slate-500 sm:mt-2">{description}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="mx-auto max-w-7xl px-4 pb-6 sm:px-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {[1, 2, 3].map((index) => (
-              <div key={index} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
               </div>
             ))}
           </div>
@@ -270,7 +284,7 @@ function PublicPortal({ onLoginRequest }) {
 
         <section id="public-info" className="mx-auto max-w-7xl px-4 pb-10 sm:px-6">
           <LaneManagement publicView onLoginRequest={onLoginRequest} />
-          <div className="mt-6">
+          <div id="public-reviews" className="mt-6 scroll-mt-6">
             <ReviewManagement publicView />
           </div>
         </section>

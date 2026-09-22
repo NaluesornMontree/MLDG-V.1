@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, getDoc, onSnapshot, serverTimestamp, doc, updateDoc, setDoc } from 'firebase/firestore';
 import BookingFlow from './BookingFlow'; 
-import { NavIcon, ResponsiveNavButton } from './DashboardNav';
+import { NavIcon, ResponsiveNavButton, SidebarIdentityPanel } from './DashboardNav';
 import { StarIcon } from './AppIcons';
 import IntegerStepperInput from './IntegerStepperInput';
 import QuantityAdjuster from './QuantityAdjuster';
@@ -1091,6 +1091,26 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
     setReviewComment('');
   };
 
+  const profileName = String(profileForm.FullName || userData?.FullName || userData?.fullName || '').trim();
+  const profilePhone = normalizePhoneNumber(profileForm.PhoneNumber || userData?.PhoneNumber || userData?.phone || '');
+  const profileCompletionIssues = [
+    !profileName ? 'ชื่อ-นามสกุล' : '',
+    profilePhone.length !== 10 ? 'เบอร์โทรศัพท์ 10 หลัก' : ''
+  ].filter(Boolean);
+  const isProfileComplete = profileCompletionIssues.length === 0;
+
+  const handleCustomerNavigate = (nextTab) => {
+    if (nextTab === 'booking' && !isProfileComplete) {
+      window.appAlert(`กรุณากรอกข้อมูลส่วนตัวให้ครบก่อนทำรายการจอง: ${profileCompletionIssues.join(', ')}`);
+      setActiveTab('profile');
+      setMobileMenuOpen(false);
+      return;
+    }
+
+    setActiveTab(nextTab);
+    setMobileMenuOpen(false);
+  };
+
   const navItems = [
     { id: 'dashboard', label: 'แดชบอร์ด', icon: 'dashboard' },
     { id: 'profile', label: 'ข้อมูลโปรไฟล์ของฉัน', icon: 'user' },
@@ -1128,35 +1148,16 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
         }}
       >
         <div className="relative z-10">
-          <div className={`hidden md:flex mb-5 items-center gap-2 ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
-            {!sidebarCollapsed && (
-              <h2 className="min-w-0 flex-1 rounded-2xl border border-amber-400/30 bg-amber-600/25 px-4 py-3 text-lg font-black tracking-wide text-white shadow-sm shadow-amber-950/20">
-                MLG Member
-              </h2>
-            )}
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed((value) => !value)}
-              title={sidebarCollapsed ? 'แสดงชื่อเมนู' : 'ซ่อนชื่อเมนู'}
-              aria-label={sidebarCollapsed ? 'แสดงชื่อเมนู' : 'ซ่อนชื่อเมนู'}
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white transition-all hover:bg-white/20"
-            >
-              <NavIcon name="menu" className="h-5 w-5" />
-            </button>
-          </div>
-          
-          {/* บล็อกแสดงข้อมูลผู้เข้าใช้งานและแต้มสะสม */}
-          <div className={`${sidebarCollapsed ? 'md:hidden' : 'md:block'} hidden mb-6 p-4 bg-emerald-950/40 rounded-2xl border border-emerald-800/50 text-left`}>
-            <div className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">
-              แต้มสะสมของคุณ
-            </div>
-            <div className="text-3xl font-black text-amber-400 mt-1">
-              {formatPoints(userData?.Points_Balance ?? userData?.points_balance ?? 0)} <span className="text-xs text-white font-bold">PTS</span>
-            </div>
-            <div className="text-[10px] text-slate-300 font-bold truncate mt-2">
-              คุณ {userData?.FullName || userData?.fullName || 'สมาชิก'}
-            </div>
-          </div>
+          <SidebarIdentityPanel
+            collapsed={sidebarCollapsed}
+            title="MLG Member"
+            name={userData?.FullName || userData?.fullName || 'สมาชิก'}
+            email={user?.email}
+            pointsLabel={`${formatPoints(userData?.Points_Balance ?? userData?.points_balance ?? 0)} PTS`}
+            accent="member"
+            fallbackInitials="MB"
+            onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
+          />
 
           <nav className={`${mobileMenuOpen ? 'grid grid-cols-1 gap-2 pb-2' : 'flex gap-2 overflow-x-auto pb-1'} md:flex md:flex-col md:overflow-visible md:pb-0`}>
             <button
@@ -1178,8 +1179,7 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
                 collapsed={sidebarCollapsed}
                 mobileExpanded={mobileMenuOpen}
                 onClick={() => {
-                  setActiveTab(item.id);
-                  setMobileMenuOpen(false);
+                  handleCustomerNavigate(item.id);
                 }}
               />
             ))}
@@ -1196,19 +1196,19 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
           </nav>
 
           <nav className="hidden">
-            <button onClick={() => setActiveTab('profile')} 
+            <button onClick={() => handleCustomerNavigate('profile')} 
               className={`w-full text-left p-4 rounded-2xl font-bold transition-all ${activeTab === 'profile' ? 'bg-emerald-600 shadow-lg' : 'hover:bg-emerald-800'}`}>
               ข้อมูลโปรไฟล์ของฉัน
             </button>
-            <button onClick={() => setActiveTab('booking')} 
+            <button onClick={() => handleCustomerNavigate('booking')} 
               className={`w-full text-left p-4 rounded-2xl font-bold transition-all ${activeTab === 'booking' ? 'bg-emerald-600 shadow-lg' : 'hover:bg-emerald-800'}`}>
               จองสนามซ้อมออนไลน์
             </button>
-            <button onClick={() => setActiveTab('history')} 
+            <button onClick={() => handleCustomerNavigate('history')} 
               className={`w-full text-left p-4 rounded-2xl font-bold transition-all ${activeTab === 'history' ? 'bg-emerald-600 shadow-lg' : 'hover:bg-emerald-800'}`}>
               รายการจองของฉัน
             </button>
-            <button onClick={() => setActiveTab('writereview')} 
+            <button onClick={() => handleCustomerNavigate('writereview')} 
               className={`w-full text-left p-4 rounded-2xl font-bold transition-all ${activeTab === 'writereview' ? 'bg-emerald-600 shadow-lg' : 'hover:bg-emerald-800'}`}>
               รีวิวและให้คะแนน
             </button>
@@ -1251,29 +1251,59 @@ function CustomerDashboard({ user, userData, handleLogout, onPasswordResetEmailS
             role="customer"
             user={user}
             userData={userData}
-            onNavigate={setActiveTab}
+            onNavigate={handleCustomerNavigate}
           />
         )}
 
         {/* TAB 1: ข้อมูลหน้าโปรไฟล์สมาชิก */}
         {activeTab === 'profile' && (
-          <AccountProfileCard
-            user={user}
-            profileForm={profileForm}
-            setProfileForm={setProfileForm}
-            updatingProfile={updatingProfile}
-            onSubmit={handleUpdateProfile}
-            fallbackName="สมาชิก"
-            fallbackInitials="MB"
-            pointsBalance={userData?.Points_Balance ?? userData?.points_balance ?? 0}
-            onPasswordResetEmailSent={onPasswordResetEmailSent}
-          />
+          <div className="w-full max-w-[1600px] mx-auto space-y-4">
+            {!isProfileComplete && (
+              <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50 px-5 py-4 text-left shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-700">Profile Required</p>
+                <h3 className="mt-1 text-base font-black text-slate-900">กรุณากรอกข้อมูลส่วนตัวให้ครบก่อนทำรายการจอง</h3>
+                <p className="mt-1.5 text-sm font-bold leading-relaxed text-slate-600">
+                  บัญชีที่เข้าสู่ระบบด้วย Google หรือ Facebook อาจไม่มีเบอร์โทรศัพท์ในระบบ กรุณาบันทึก {profileCompletionIssues.join(' และ ')} ก่อนเริ่มจองเลนซ้อม
+                </p>
+              </div>
+            )}
+            <AccountProfileCard
+              user={user}
+              profileForm={profileForm}
+              setProfileForm={setProfileForm}
+              updatingProfile={updatingProfile}
+              onSubmit={handleUpdateProfile}
+              fallbackName="สมาชิก"
+              fallbackInitials="MB"
+              pointsBalance={userData?.Points_Balance ?? userData?.points_balance ?? 0}
+              onPasswordResetEmailSent={onPasswordResetEmailSent}
+            />
+          </div>
         )}
 
         {/* TAB 2: หน้าต่างทำรายการจองสนาม */}
         {activeTab === 'booking' && (
           <div className="w-full max-w-[1600px] mx-auto rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm animate-fadeIn sm:p-8">
-            <BookingFlow user={user} userData={userData} />
+            {isProfileComplete ? (
+              <BookingFlow user={user} userData={userData} />
+            ) : (
+              <div className="py-12 text-center">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-amber-50 text-amber-600">
+                  <NavIcon name="user" className="h-7 w-7" />
+                </div>
+                <h3 className="mt-5 text-xl font-black text-slate-900">ยังไม่สามารถจองได้</h3>
+                <p className="mx-auto mt-2 max-w-lg text-sm font-bold leading-relaxed text-slate-500">
+                  กรุณากรอกข้อมูลส่วนตัวให้ครบก่อน ได้แก่ {profileCompletionIssues.join(' และ ')}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleCustomerNavigate('profile')}
+                  className="mt-6 rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-black text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-95"
+                >
+                  ไปกรอกข้อมูลส่วนตัว
+                </button>
+              </div>
+            )}
           </div>
         )}
 

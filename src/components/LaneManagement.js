@@ -737,6 +737,17 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
       });
       return;
     }
+    const normalizedWalkInPhone = String(walkInPhone || '').replace(/\D/g, '');
+    if (isPhoneBookingMode && normalizedWalkInPhone.length !== 10) {
+      setAlertPopup({
+        isOpen: true,
+        type: 'danger',
+        title: 'ข้อมูลไม่ครบถ้วน',
+        message: 'กรุณากรอกเบอร์โทรศัพท์ลูกค้าให้ครบ 10 หลักก่อนบันทึกรายการจองล่วงหน้า',
+        onConfirm: () => setAlertPopup(prev => ({ ...prev, isOpen: false }))
+      });
+      return;
+    }
     if (walkInNeedsClubRent && walkInSelectedClubs.length === 0) {
       setAlertPopup({
         isOpen: true,
@@ -797,7 +808,7 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
         User_ID: walkInMemberInfo?.id || 'walk-in',
         customerName: walkInName,
         customerEmail: normalizedEmail,
-        customerPhone: walkInPhone || "",
+        customerPhone: normalizedWalkInPhone || "",
         guestCount: Math.max(1, toWholeNumber(walkInGuests || 1)),
         needsInstructor: walkInInstructor,
         needsClubRent: walkInNeedsClubRent,
@@ -1463,7 +1474,21 @@ function LaneManagement({ userData, onCheckoutBooking, publicView = false, onLog
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">เบอร์โทรศัพท์</label>
-                <input type="tel" value={walkInPhone} onChange={(e) => setWalkInPhone(e.target.value)} placeholder="กรอกเบอร์โทรศัพท์ (ถ้ามี)..." className="w-full bg-slate-100 p-3 rounded-xl text-sm font-bold focus:outline-none" />
+                <input
+                  type="tel"
+                  value={walkInPhone}
+                  maxLength={10}
+                  inputMode="numeric"
+                  pattern="[0-9]{10}"
+                  onChange={(e) => setWalkInPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder={isPhoneBookingMode ? 'กรอกเบอร์โทรศัพท์ 10 หลัก...' : 'กรอกเบอร์โทรศัพท์ (ถ้ามี)...'}
+                  className="w-full bg-slate-100 p-3 rounded-xl text-sm font-bold focus:outline-none"
+                />
+                {isPhoneBookingMode && (
+                  <p className="mt-1 text-[11px] font-bold text-slate-400">
+                    จำเป็นต้องกรอกเบอร์โทรศัพท์ 10 หลักสำหรับการจองล่วงหน้า
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">จำนวนผู้เข้าใช้บริการ (ท่าน)</label>

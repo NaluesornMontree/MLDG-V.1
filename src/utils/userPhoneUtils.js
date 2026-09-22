@@ -2,6 +2,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 
 export const normalizePhoneNumber = (value = '') => String(value || '').replace(/\D/g, '');
 export const normalizeEmail = (value = '') => String(value || '').trim().toLowerCase();
+export const isValidEmailFormat = (value = '') => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normalizeEmail(value));
 
 export const getDuplicatePhoneMessage = (phoneNumber) => (
   `เบอร์โทรศัพท์ ${phoneNumber} ถูกใช้ในระบบแล้ว กรุณาใช้เบอร์อื่น`

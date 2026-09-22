@@ -9,7 +9,7 @@ import ShopClosureManagement from './ShopClosureManagement';
 import PaymentManager from './PaymentManager'; 
 import ReviewManagement from './ReviewManagement'; 
 import BookingHistoryManagement from './BookingHistoryManagement';
-import { NavIcon, ResponsiveNavButton } from './DashboardNav';
+import { NavIcon, ResponsiveNavButton, SidebarIdentityPanel } from './DashboardNav';
 import AccountProfileCard from './AccountProfileCard';
 import DashboardHome from './DashboardHome';
 import BillingRequestNotifier from './BillingRequestNotifier';
@@ -91,30 +91,15 @@ function OwnerDashboard({ user, userData, handleLogout, onPasswordResetEmailSent
         }}
       >
         <div className="relative z-10">
-          <div className={`hidden md:flex mb-5 items-center gap-2 ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
-            {!sidebarCollapsed && (
-              <h2 className="min-w-0 flex-1 rounded-2xl border border-blue-400/30 bg-blue-600/25 px-4 py-3 text-lg font-black tracking-wide text-white shadow-sm shadow-blue-950/20">
-                MLG Owner
-              </h2>
-            )}
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed((value) => !value)}
-              title={sidebarCollapsed ? 'แสดงชื่อเมนู' : 'ซ่อนชื่อเมนู'}
-              aria-label={sidebarCollapsed ? 'แสดงชื่อเมนู' : 'ซ่อนชื่อเมนู'}
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white transition-all hover:bg-white/20"
-            >
-              <NavIcon name="menu" className="h-5 w-5" />
-            </button>
-          </div>
-          
-          <div className={`${sidebarCollapsed ? 'md:hidden' : 'md:block'} hidden mb-6 p-4 bg-emerald-950/40 rounded-2xl border border-emerald-800/50 text-left`}>
-            <div className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">ผู้เข้าใช้งาน</div>
-            <div className="text-sm font-black text-white truncate mt-1">
-              {userData?.FullName || userData?.fullName || 'ไม่ระบุชื่อ'}
-            </div>
-            <div className="text-[10px] text-slate-400 font-bold truncate">{user?.email}</div>
-          </div>
+          <SidebarIdentityPanel
+            collapsed={sidebarCollapsed}
+            title="MLG Owner"
+            name={userData?.FullName || userData?.fullName || 'ไม่ระบุชื่อ'}
+            email={user?.email}
+            accent="owner"
+            fallbackInitials="OW"
+            onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
+          />
 
           <nav className={`${mobileMenuOpen ? 'grid grid-cols-1 gap-2 pb-2' : 'flex gap-2 overflow-x-auto pb-1'} md:flex md:flex-col md:overflow-visible md:pb-0`}>
             <button

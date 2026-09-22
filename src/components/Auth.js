@@ -15,6 +15,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { theme } from '../styles/theme'; 
 import {
   getDuplicateEmailMessage,
+  isValidEmailFormat,
   normalizeEmail,
   normalizePhoneNumber
 } from '../utils/userPhoneUtils';
@@ -107,6 +108,10 @@ function Auth() {
         return;
       }
 
+      if (!isValidEmailFormat(normalizedEmail)) {
+        window.appAlert("สมัครสมาชิกไม่สำเร็จ เพราะรูปแบบอีเมลไม่ถูกต้อง กรุณากรอกอีเมลให้ครบถ้วน เช่น name@example.com");
+        return;
+      }
       if (normalizedPhone.length !== 10) {
         window.appAlert("สมัครสมาชิกไม่สำเร็จ เพราะเบอร์โทรศัพท์ต้องมี 10 หลัก");
         return;
@@ -119,13 +124,14 @@ function Auth() {
         window.appAlert("สมัครสมาชิกไม่สำเร็จ เพราะรหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร");
         return;
       }
+      await assertPhoneAvailableForSignup(db, normalizedPhone);
+      await assertEmailAvailableForSignup(db, normalizedEmail);
       const existingSignInMethods = await fetchSignInMethodsForEmail(auth, normalizedEmail);
       if (existingSignInMethods.length > 0) {
         window.appAlert(getDuplicateEmailMessage(normalizedEmail));
         return;
       }
-      await assertEmailAvailableForSignup(db, normalizedEmail);
-      await assertPhoneAvailableForSignup(db, normalizedPhone);
+
       if (!allowWeakPassword && !getPasswordStrength(password).isAcceptable) {
         setWeakPasswordConfirmOpen(true);
         return;

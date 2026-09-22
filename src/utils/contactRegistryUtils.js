@@ -139,3 +139,32 @@ export const saveUserProfileWithContactRegistry = async (db, userId, profileUpda
     transaction.set(userRef, normalizedUpdates, { merge });
   });
 };
+
+export const deleteUserProfileWithContactRegistry = async (db, userId) => {
+  await runTransaction(db, async (transaction) => {
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await transaction.get(userRef);
+
+    if (!userSnap.exists()) {
+      return;
+    }
+
+    const userData = userSnap.data();
+    const email = normalizeEmail(userData.Email ?? userData.email);
+    const phone = normalizePhoneNumber(userData.PhoneNumber ?? userData.phone);
+    const emailRef = email ? doc(db, 'email_registry', email) : null;
+    const phoneRef = phone ? doc(db, 'phone_registry', phone) : null;
+    const emailSnap = emailRef ? await transaction.get(emailRef) : null;
+    const phoneSnap = phoneRef ? await transaction.get(phoneRef) : null;
+
+    if (emailSnap?.exists?.() && emailSnap.data()?.User_ID === userId) {
+      transaction.delete(emailRef);
+    }
+
+    if (phoneSnap?.exists?.() && phoneSnap.data()?.User_ID === userId) {
+      transaction.delete(phoneRef);
+    }
+
+    transaction.delete(userRef);
+  });
+};

@@ -7,6 +7,7 @@ import Popup from './Popup';
 import {
   findUserByEmail,
   getDuplicateEmailMessage,
+  isValidEmailFormat,
   normalizeEmail,
   normalizePhoneNumber
 } from '../utils/userPhoneUtils';
@@ -73,6 +74,10 @@ function StaffManagement() {
         return;
       }
 
+      if (!isValidEmailFormat(normalizedEmail)) {
+        window.appAlert("สร้างบัญชีไม่สำเร็จ เพราะรูปแบบอีเมลไม่ถูกต้อง กรุณากรอกอีเมลให้ครบถ้วน เช่น name@example.com");
+        return;
+      }
       if (normalizedPhone.length !== 10) {
         window.appAlert("สร้างบัญชีไม่สำเร็จ เพราะเบอร์โทรศัพท์ต้องมี 10 หลัก");
         return;
@@ -86,20 +91,19 @@ function StaffManagement() {
         return;
       }
 
+      await assertPhoneAvailableForSignup(db, normalizedPhone);
+
       const duplicateEmailUser = await findUserByEmail(db, normalizedEmail);
       if (duplicateEmailUser) {
         window.appAlert(getDuplicateEmailMessage(normalizedEmail));
         return;
       }
-
+      await assertEmailAvailableForSignup(db, normalizedEmail);
       const existingSignInMethods = await fetchSignInMethodsForEmail(secondaryAuth, normalizedEmail);
       if (existingSignInMethods.length > 0) {
         window.appAlert(getDuplicateEmailMessage(normalizedEmail));
         return;
       }
-
-      await assertEmailAvailableForSignup(db, normalizedEmail);
-      await assertPhoneAvailableForSignup(db, normalizedPhone);
 
       if (!allowWeakPassword && !getPasswordStrength(newStaff.Password).isAcceptable) {
         setWeakPasswordConfirmOpen(true);
@@ -157,6 +161,10 @@ function StaffManagement() {
     try {
       const normalizedPhone = normalizePhoneNumber(editData.PhoneNumber);
       const normalizedEmail = normalizeEmail(editData.Email);
+      if (!isValidEmailFormat(normalizedEmail)) {
+        window.appAlert("รูปแบบอีเมลไม่ถูกต้อง กรุณากรอกอีเมลให้ครบถ้วน เช่น name@example.com");
+        return;
+      }
       if (normalizedPhone.length !== 10) {
         window.appAlert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลัก");
         return;
